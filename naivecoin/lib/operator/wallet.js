@@ -77,7 +77,7 @@ class Wallet {
         wallet.id = CryptoUtil.randomId();
         wallet.passwordHash = CryptoUtil.hash(password);
         wallet.studentId = studentId;
-        wallet.balance = 0;
+        wallet.balance = 100;
         
         const seed = CryptoUtil.hash(password + studentId);
         wallet.secret = CryptoEdDSAUtil.generateSecret(seed);

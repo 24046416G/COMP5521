@@ -64,20 +64,31 @@ class Operator {
 
     getBalanceForAddress(addressId) {        
         let utxo = this.blockchain.getUnspentTransactionsForAddress(addressId);
-        if (utxo == null || utxo.length == 0) return 0;
         
-        const balance = R.sum(R.map(R.prop('amount'), utxo));
-        
-        const wallet = R.find(
-            R.compose(R.contains(addressId), R.map(R.prop('publicKey')), R.prop('keyPairs')),
-            this.wallets
+        // 找到对应的钱包
+        const wallet = this.wallets.find(w => 
+            w.keyPairs.some(kp => kp.publicKey === addressId)
         );
+
+        // 如果是新钱包且没有交易，返回初始余额
+        if ((!utxo || utxo.length === 0) && wallet) {
+            return wallet.balance;
+        }
+        
+        // 计算UTXO总额
+        const utxoBalance = utxo ? R.sum(R.map(R.prop('amount'), utxo)) : 0;
+        
+        // 如果有钱包，更新余额（但保留初始余额）
         if (wallet) {
-            wallet.updateBalance(balance);
+            // 如果UTXO余额为0且有初始余额，保持初始余额
+            if (utxoBalance === 0 && wallet.balance === 100) {
+                return wallet.balance;
+            }
+            wallet.updateBalance(utxoBalance);
             this.db.write(this.wallets);
         }
         
-        return balance;
+        return utxoBalance || 0;
     }
 
     createTransaction(walletId, fromAddressId, toAddressId, amount, changeAddressId) {
@@ -122,6 +133,11 @@ class Operator {
             throw new Error('Student ID does not match wallet');
         }
 
+        // 检查余额是否足够
+        if (wallet.balance < Config.ATTENDANCE_CONFIG.REGISTRATION_AMOUNT) {
+            throw new Error(`Insufficient balance: required ${Config.ATTENDANCE_CONFIG.REGISTRATION_AMOUNT}, but got ${wallet.balance}`);
+        }
+
         // 获取学生的公钥
         let studentPublicKey = wallet.getPublicKey();
         if (!studentPublicKey) {
@@ -150,6 +166,24 @@ class Operator {
             }
         };
 
+        // 更新学生钱包余额
+        wallet.updateBalance(wallet.balance - Config.ATTENDANCE_CONFIG.REGISTRATION_AMOUNT);
+        this.db.write(this.wallets);
+
+        // 更新教师余额
+        const path = require('path');
+        const fs = require('fs');
+        const teacherJsonPath = path.join(__dirname, '../../data/teacher.json');
+        
+        let teacherConfig;
+        try {
+            teacherConfig = JSON.parse(fs.readFileSync(teacherJsonPath, 'utf8'));
+            teacherConfig.balance = (teacherConfig.balance || 0) + Config.ATTENDANCE_CONFIG.REGISTRATION_AMOUNT;
+            fs.writeFileSync(teacherJsonPath, JSON.stringify(teacherConfig, null, 4));
+        } catch (err) {
+            console.error('Error updating teacher balance:', err);
+        }
+
         return Transaction.fromJson(transactionData);
     }
 
@@ -157,17 +191,37 @@ class Operator {
         const wallet = this.getWalletById(walletId);
         if (wallet == null) throw new ArgumentError(`Wallet not found with id '${walletId}'`);
         
-        const balance = R.sum(
+        // 获取钱包的所有地址
+        const addresses = wallet.getAddresses();
+        
+        // 检查是否有任何交易
+        const hasTransactions = addresses.some(address => {
+            const utxo = this.blockchain.getUnspentTransactionsForAddress(address);
+            return utxo && utxo.length > 0;
+        });
+
+        // 如果是新钱包且没有交易，返回初始余额
+        if (!hasTransactions && wallet.balance === 100) {
+            return wallet.balance;
+        }
+        
+        // 计算所有地址的UTXO总额
+        const totalBalance = R.sum(
             R.map(
                 address => this.getBalanceForAddress(address),
-                wallet.getAddresses()
+                addresses
             )
         );
         
-        wallet.updateBalance(balance);
+        // 如果计算出的余额为0但有初始余额，保持初始余额
+        if (totalBalance === 0 && wallet.balance === 100) {
+            return wallet.balance;
+        }
+        
+        wallet.updateBalance(totalBalance);
         this.db.write(this.wallets);
         
-        return balance;
+        return totalBalance;
     }
 }
 
