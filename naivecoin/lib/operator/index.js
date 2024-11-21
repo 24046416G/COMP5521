@@ -64,9 +64,20 @@ class Operator {
 
     getBalanceForAddress(addressId) {        
         let utxo = this.blockchain.getUnspentTransactionsForAddress(addressId);
-
-        if (utxo == null || utxo.length == 0) throw new ArgumentError(`No transactions found for address '${addressId}'`);
-        return R.sum(R.map(R.prop('amount'), utxo));
+        if (utxo == null || utxo.length == 0) return 0;
+        
+        const balance = R.sum(R.map(R.prop('amount'), utxo));
+        
+        const wallet = R.find(
+            R.compose(R.contains(addressId), R.map(R.prop('publicKey')), R.prop('keyPairs')),
+            this.wallets
+        );
+        if (wallet) {
+            wallet.updateBalance(balance);
+            this.db.write(this.wallets);
+        }
+        
+        return balance;
     }
 
     createTransaction(walletId, fromAddressId, toAddressId, amount, changeAddressId) {
@@ -139,8 +150,24 @@ class Operator {
             }
         };
 
-        // 使用 Transaction.fromJson() 创建交易实例
         return Transaction.fromJson(transactionData);
+    }
+
+    getWalletBalance(walletId) {
+        const wallet = this.getWalletById(walletId);
+        if (wallet == null) throw new ArgumentError(`Wallet not found with id '${walletId}'`);
+        
+        const balance = R.sum(
+            R.map(
+                address => this.getBalanceForAddress(address),
+                wallet.getAddresses()
+            )
+        );
+        
+        wallet.updateBalance(balance);
+        this.db.write(this.wallets);
+        
+        return balance;
     }
 }
 

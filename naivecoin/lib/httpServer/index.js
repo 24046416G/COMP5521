@@ -26,7 +26,9 @@ class HttpServer {
                 id: wallet.id,
                 addresses: R.map((keyPair) => {
                     return keyPair.publicKey;
-                }, wallet.keyPairs)
+                }, wallet.keyPairs),
+                balance: wallet.balance,
+                studentId: wallet.studentId
             };
         };
 
@@ -278,6 +280,15 @@ class HttpServer {
                 res.status(201).send(transaction);
             } catch (err) {
                 res.status(400).send(err.message);
+            }
+        });
+
+        this.app.get('/operator/wallets/:walletId/balance', (req, res) => {
+            try {
+                let balance = this.operator.getWalletBalance(req.params.walletId);
+                res.status(200).send({ balance: balance });
+            } catch (err) {
+                res.status(404).send(err.message);
             }
         });
 

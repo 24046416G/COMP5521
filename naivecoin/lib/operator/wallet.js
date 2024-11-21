@@ -8,6 +8,7 @@ class Wallet {
         this.passwordHash = null;
         this.secret = null;
         this.keyPairs = [];
+        this.balance = 0;
     }
 
     generateAddress() {
@@ -76,6 +77,7 @@ class Wallet {
         wallet.id = CryptoUtil.randomId();
         wallet.passwordHash = CryptoUtil.hash(password);
         wallet.studentId = studentId;
+        wallet.balance = 0;
         
         const seed = CryptoUtil.hash(password + studentId);
         wallet.secret = CryptoEdDSAUtil.generateSecret(seed);
@@ -100,6 +102,10 @@ class Wallet {
 
     getKeyPairs() {
         return this.keyPairs;
+    }
+
+    updateBalance(amount) {
+        this.balance = amount;
     }
 }
 

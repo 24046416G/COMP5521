@@ -1,4 +1,6 @@
 // Do not change these configurations after the blockchain is initialized
+const teacherConfig = require('../data/teacher.json');
+
 module.exports = {
     // INFO: The mining reward could decreases over time like bitcoin. See https://en.bitcoin.it/wiki/Mining#Reward.
     MINING_REWARD: 5000000000,
@@ -54,7 +56,7 @@ module.exports = {
             return Math.max(Math.floor(difficulty), 1);
         }
     },
-    // 添加新的交易类型
+    // 交易类型定义
     TRANSACTION_TYPE: {
         REGULAR: 'regular',
         FEE: 'fee',
@@ -62,10 +64,10 @@ module.exports = {
         STUDENT_REGISTRATION: 'studentRegistration',
         ATTENDANCE: 'attendance'
     },
-    // 添加考勤系统相关配置
+    // 考勤系统相关配置
     ATTENDANCE_CONFIG: {
         REGISTRATION_AMOUNT: 1,    // 注册交易金额
         ATTENDANCE_AMOUNT: 1,      // 考勤交易金额
-        DEFAULT_TEACHER_ADDRESS: 'teacher_public_key' // 教师的默认公钥地址
+        DEFAULT_TEACHER_ADDRESS: teacherConfig.address // 使用teacher.json中的地址
     }
 };
