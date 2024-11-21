@@ -292,6 +292,24 @@ class HttpServer {
             }
         });
 
+        this.app.get('/teacher/balance', (req, res) => {
+            try {
+                const path = require('path');
+                const fs = require('fs');
+                const teacherJsonPath = path.join(__dirname, '../../data/teacher.json');
+                
+                let teacherConfig = JSON.parse(fs.readFileSync(teacherJsonPath, 'utf8'));
+                res.status(200).send({ 
+                    balance: teacherConfig.balance,
+                    address: teacherConfig.address,
+                    email: teacherConfig.teacherEmail
+                });
+            } catch (err) {
+                console.error('Error reading teacher balance:', err);
+                res.status(500).send('Error reading teacher balance');
+            }
+        });
+
         this.app.use(function (err, req, res, next) {  // eslint-disable-line no-unused-vars
             if (err instanceof HTTPError) res.status(err.status);
             else res.status(500);
