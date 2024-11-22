@@ -112,8 +112,8 @@ class Operator {
         return Transaction.fromJson(tx.build());
     }
 
-    createStudentWallet(password, studentId) {
-        let wallet = Wallet.createStudentWallet(password, studentId);
+    createStudentWallet(password, studentId, classId) {
+        let wallet = Wallet.createStudentWallet(password, studentId, classId);
         this.wallets.push(wallet);
         this.db.write(this.wallets);
         return wallet;

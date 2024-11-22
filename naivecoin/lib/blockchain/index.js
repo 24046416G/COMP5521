@@ -391,56 +391,59 @@ class Blockchain {
             const rewardTransaction = block.transactions.find(tx => tx.type === 'reward');
             const feeTransaction = block.transactions.find(tx => tx.type === 'fee');
 
-            if (!rewardTransaction && !feeTransaction) {
-                console.info('No reward or fee transactions found in block');
-                return;
-            }
+            // 1. 更新学生钱包余额（挖矿奖励）
+            if (rewardTransaction) {
+                const minerAddress = rewardTransaction.data.outputs[0].address;
+                const rewardAmount = rewardTransaction.data.outputs[0].amount;
 
-            // 计算总奖励金额
-            const rewardAmount = rewardTransaction ? rewardTransaction.data.outputs[0].amount : 0;
-            const feeAmount = feeTransaction ? feeTransaction.data.outputs[0].amount : 0;
-            const totalReward = rewardAmount + feeAmount;
-
-            // 获取矿工地址
-            const minerAddress = rewardTransaction ? rewardTransaction.data.outputs[0].address : null;
-            if (!minerAddress) {
-                console.error('No miner address found in reward transaction');
-                return;
-            }
-
-            // 读取钱包文件
-            const path = require('path');
-            const fs = require('fs');
-            const walletsPath = path.join(__dirname, '../../data/1/wallets.json');
-            
-            let wallets = [];
-            try {
-                const walletsData = fs.readFileSync(walletsPath, 'utf8');
-                wallets = JSON.parse(walletsData);
-            } catch (err) {
-                console.error('Error reading wallets file:', err);
-                return;
-            }
-
-            // 找到矿工的钱包
-            const minerWallet = wallets.find(w => 
-                w.keyPairs.some(kp => kp.publicKey === minerAddress)
-            );
-
-            if (minerWallet) {
-                // 更新余额
-                minerWallet.balance = (parseInt(minerWallet.balance) || 0) + totalReward;
+                // 读取学生钱包文件
+                const path = require('path');
+                const fs = require('fs');
+                const walletsPath = path.join(__dirname, '../../data/1/wallets.json');
                 
-                // 保存更新后的钱包数据
-                fs.writeFileSync(walletsPath, JSON.stringify(wallets, null, 4));
+                let wallets = [];
+                try {
+                    const walletsData = fs.readFileSync(walletsPath, 'utf8');
+                    wallets = JSON.parse(walletsData);
+
+                    // 找到学生钱包并更新余额
+                    const minerWallet = wallets.find(w => 
+                        w.keyPairs.some(kp => kp.publicKey === minerAddress)
+                    );
+
+                    if (minerWallet) {
+                        minerWallet.balance = parseInt(minerWallet.balance || 0) + rewardAmount;
+                        fs.writeFileSync(walletsPath, JSON.stringify(wallets, null, 4));
+                        console.info(`Updated student wallet balance: +${rewardAmount}`);
+                    }
+                } catch (err) {
+                    console.error('Error updating student wallet:', err);
+                }
+            }
+
+            // 2. 更新教师钱包余额（手续费）
+            if (feeTransaction) {
+                const teacherAddress = feeTransaction.data.outputs[0].address;
+                const feeAmount = feeTransaction.data.outputs[0].amount;
+
+                // 读取教师钱包文件
+                const path = require('path');
+                const fs = require('fs');
+                const teacherJsonPath = path.join(__dirname, '../../data/teacher.json');
                 
-                console.info(`Updated miner wallet balance: +${totalReward} (reward: ${rewardAmount}, fee: ${feeAmount})`);
-                console.info(`New balance for miner ${minerAddress}: ${minerWallet.balance}`);
-            } else {
-                console.error(`Miner wallet not found for address: ${minerAddress}`);
+                try {
+                    let teacherConfig = JSON.parse(fs.readFileSync(teacherJsonPath, 'utf8'));
+                    if (teacherConfig.address === teacherAddress) {
+                        teacherConfig.balance = parseInt(teacherConfig.balance || 0) + feeAmount;
+                        fs.writeFileSync(teacherJsonPath, JSON.stringify(teacherConfig, null, 4));
+                        console.info(`Updated teacher wallet balance: +${feeAmount}`);
+                    }
+                } catch (err) {
+                    console.error('Error updating teacher wallet:', err);
+                }
             }
         } catch (err) {
-            console.error('Error updating mining reward:', err);
+            console.error('Error in updateMiningReward:', err);
         }
     }
 }

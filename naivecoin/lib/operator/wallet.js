@@ -72,11 +72,12 @@ class Wallet {
         return wallet;
     }
 
-    static createStudentWallet(password, studentId) {
+    static createStudentWallet(password, studentId, classId) {
         let wallet = new Wallet();
         wallet.id = CryptoUtil.randomId();
         wallet.passwordHash = CryptoUtil.hash(password);
         wallet.studentId = studentId;
+        wallet.classId = classId;
         wallet.balance = 100;
         
         const seed = CryptoUtil.hash(password + studentId);

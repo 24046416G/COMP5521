@@ -28,7 +28,8 @@ class HttpServer {
                     return keyPair.publicKey;
                 }, wallet.keyPairs),
                 balance: wallet.balance,
-                studentId: wallet.studentId
+                studentId: wallet.studentId,
+                classId: wallet.classId
             };
         };
 
@@ -148,12 +149,31 @@ class HttpServer {
         });
 
         this.app.get('/operator/wallets/:walletId', (req, res) => {
-            let walletFound = operator.getWalletById(req.params.walletId);
-            if (walletFound == null) throw new HTTPError(404, `Wallet not found with id '${req.params.walletId}'`);
-
-            let projectedWallet = projectWallet(walletFound);
-
-            res.status(200).send(projectedWallet);
+            try {
+                // 直接读取 wallets.json 文件
+                const path = require('path');
+                const fs = require('fs');
+                const walletsPath = path.join(__dirname, '../../data/1/wallets.json');
+                
+                // 读取并解析 wallets.json
+                const walletsData = fs.readFileSync(walletsPath, 'utf8');
+                const wallets = JSON.parse(walletsData);
+                
+                // 查找指定的钱包
+                const wallet = wallets.find(w => w.id === req.params.walletId);
+                if (!wallet) throw new Error(`Wallet not found with id '${req.params.walletId}'`);
+                
+                // 返回钱包信息
+                res.status(200).send({
+                    id: wallet.id,
+                    addresses: wallet.keyPairs,
+                    balance: wallet.balance,
+                    studentId: wallet.studentId,
+                    classId: wallet.classId
+                });
+            } catch (err) {
+                res.status(404).send(err.message);
+            }
         });
 
         this.app.post('/operator/wallets/:walletId/transactions', (req, res) => {
@@ -178,46 +198,34 @@ class HttpServer {
             }
         });
 
-        this.app.get('/operator/wallets/:walletId/addresses', (req, res) => {
-            let walletId = req.params.walletId;
-            try {
-                let addresses = operator.getAddressesForWallet(walletId);
-                res.status(200).send(addresses);
-            } catch (ex) {
-                if (ex instanceof ArgumentError) throw new HTTPError(400, ex.message, walletId, ex);
-                else throw ex;
-            }
-        });
+        // this.app.get('/operator/wallets/:walletId/addresses', (req, res) => {
+        //     let walletId = req.params.walletId;
+        //     try {
+        //         let addresses = operator.getAddressesForWallet(walletId);
+        //         res.status(200).send(addresses);
+        //     } catch (ex) {
+        //         if (ex instanceof ArgumentError) throw new HTTPError(400, ex.message, walletId, ex);
+        //         else throw ex;
+        //     }
+        // });
 
-        this.app.post('/operator/wallets/:walletId/addresses', (req, res) => {
-            let walletId = req.params.walletId;
-            let password = req.headers.password;
+        // this.app.post('/operator/wallets/:walletId/addresses', (req, res) => {
+        //     let walletId = req.params.walletId;
+        //     let password = req.headers.password;
 
-            if (password == null) throw new HTTPError(401, 'Wallet\'s password is missing.');
-            let passwordHash = CryptoUtil.hash(password);
+        //     if (password == null) throw new HTTPError(401, 'Wallet\'s password is missing.');
+        //     let passwordHash = CryptoUtil.hash(password);
 
-            try {
-                if (!operator.checkWalletPassword(walletId, passwordHash)) throw new HTTPError(403, `Invalid password for wallet '${walletId}'`);
+        //     try {
+        //         if (!operator.checkWalletPassword(walletId, passwordHash)) throw new HTTPError(403, `Invalid password for wallet '${walletId}'`);
 
-                let newAddress = operator.generateAddressForWallet(walletId);
-                res.status(201).send({ address: newAddress });
-            } catch (ex) {
-                if (ex instanceof ArgumentError) throw new HTTPError(400, ex.message, walletId, ex);
-                else throw ex;
-            }
-        });
-
-        this.app.get('/operator/:addressId/balance', (req, res) => {
-            let addressId = req.params.addressId;
-
-            try {
-                let balance = operator.getBalanceForAddress(addressId);
-                res.status(200).send({ balance: balance });
-            } catch (ex) {
-                if (ex instanceof ArgumentError) throw new HTTPError(404, ex.message, { addressId }, ex);
-                else throw ex;
-            }
-        });
+        //         let newAddress = operator.generateAddressForWallet(walletId);
+        //         res.status(201).send({ address: newAddress });
+        //     } catch (ex) {
+        //         if (ex instanceof ArgumentError) throw new HTTPError(400, ex.message, walletId, ex);
+        //         else throw ex;
+        //     }
+        // });
 
         this.app.get('/node/peers', (req, res) => {
             res.status(200).send(node.peers);
@@ -236,10 +244,12 @@ class HttpServer {
         });
 
         this.app.post('/miner/mine', (req, res, next) => {
-            miner.mine(req.body.rewardAddress, req.body['feeAddress'] || req.body.rewardAddress)
+            const teacherConfig = require('../../data/teacher.json');
+            miner.mine(req.body.rewardAddress, teacherConfig.address)
                 .then((newBlock) => {
                     newBlock = Block.fromJson(newBlock);
                     blockchain.addBlock(newBlock);
+                    blockchain.updateMiningReward(newBlock);
                     res.status(201).send(newBlock);
                 })
                 .catch((ex) => {
@@ -249,12 +259,13 @@ class HttpServer {
         });
 
         this.app.post('/student/register', (req, res) => {
-            let { password, studentId } = req.body;
+            let { password, studentId, classId } = req.body;
             try {
-                let wallet = this.operator.createStudentWallet(password, studentId);
+                let wallet = this.operator.createStudentWallet(password, studentId, classId);
                 res.status(201).send({ 
                     walletId: wallet.id,
                     studentId: wallet.studentId,
+                    classId: wallet.classId,
                     publicKey: wallet.getPublicKey(),
                     message: "Student wallet created successfully"
                 });
@@ -280,15 +291,6 @@ class HttpServer {
                 res.status(201).send(transaction);
             } catch (err) {
                 res.status(400).send(err.message);
-            }
-        });
-
-        this.app.get('/operator/wallets/:walletId/balance', (req, res) => {
-            try {
-                let balance = this.operator.getWalletBalance(req.params.walletId);
-                res.status(200).send({ balance: balance });
-            } catch (err) {
-                res.status(404).send(err.message);
             }
         });
 
