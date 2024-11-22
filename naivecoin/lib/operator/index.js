@@ -144,6 +144,9 @@ class Operator {
         if (!studentPublicKey) {
             throw new Error('No public key found for wallet');
         }
+
+        // 计算找零金额
+        const changeAmount = wallet.balance - Config.ATTENDANCE_CONFIG.REGISTRATION_AMOUNT;
         
         // 创建交易对象
         let transactionData = {
@@ -151,9 +154,17 @@ class Operator {
             hash: null,
             type: Config.TRANSACTION_TYPE.STUDENT_REGISTRATION,
             data: {
-                inputs: [],
+                inputs: [
+                    {
+                        transaction: wallet.id,
+                        index: "0",
+                        amount: wallet.balance,
+                        address: studentPublicKey
+                    }
+                ],
                 outputs: [
                     {
+                        // 给老师的金额
                         amount: Config.ATTENDANCE_CONFIG.REGISTRATION_AMOUNT,
                         address: Config.ATTENDANCE_CONFIG.DEFAULT_TEACHER_ADDRESS,
                         metadata: {
@@ -162,13 +173,39 @@ class Operator {
                             registrationTime: new Date().getTime(),
                             studentAddress: studentPublicKey
                         }
+                    },
+                    {
+                        // 找零返回给学生
+                        amount: changeAmount,
+                        address: studentPublicKey
                     }
                 ]
             }
         };
 
+        // 对输入进行签名
+        const inputData = {
+            transaction: transactionData.data.inputs[0].transaction,
+            index: transactionData.data.inputs[0].index,
+            amount: transactionData.data.inputs[0].amount,
+            address: transactionData.data.inputs[0].address
+        };
+
+        // 生成密钥对并签名
+        const keyPair = CryptoEdDSAUtil.generateKeyPairFromSecret(wallet.getSecretKey());
+        const signature = CryptoEdDSAUtil.signHash(
+            keyPair,
+            CryptoUtil.hash(JSON.stringify(inputData))
+        );
+
+        // 添加签名到输入
+        transactionData.data.inputs[0].signature = signature;
+
+        // 计算最终的交易哈希
+        transactionData.hash = CryptoUtil.hash(transactionData.id + JSON.stringify(transactionData.data));
+
         // 更新学生钱包余额
-        wallet.updateBalance(wallet.balance - Config.ATTENDANCE_CONFIG.REGISTRATION_AMOUNT);
+        wallet.updateBalance(changeAmount);  // 更新为找零金额
         this.db.write(this.wallets);
 
         // 更新教师余额

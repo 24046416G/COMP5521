@@ -121,7 +121,7 @@ class Transaction {
     // 添加学生注册交易的验证方法
     checkStudentRegistration() {
         // 验证输出
-        if (this.data.outputs.length !== 1) {
+        if (this.data.outputs.length !== 2) {
             throw new TransactionAssertionError('Student registration must have exactly one output');
         }
 
