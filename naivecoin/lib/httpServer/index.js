@@ -135,8 +135,38 @@ class HttpServer {
             }
         });
 
+        //http://localhost:3001/blockchain/transactions/unspent?address=your_address
         this.app.get('/blockchain/transactions/unspent', (req, res) => {
-            res.status(200).send(blockchain.getUnspentTransactionsForAddress(req.query.address));
+            try {
+                const address = req.query.address;
+                if (!address) {
+                    res.status(400).send('Address parameter is required');
+                    return;
+                }
+
+                const unspentTxs = blockchain.getUnspentTransactionsForAddress(address);
+                
+                // 格式化返回结果，添加更多有用的信息
+                const formattedUnspentTxs = unspentTxs.map(utxo => ({
+                    transaction: utxo.transaction,  // 交易ID
+                    index: utxo.index,             // 输出索引
+                    amount: utxo.amount,           // 金额
+                    address: utxo.address,         // 地址
+                    blockIndex: utxo.blockIndex,   // 所在区块索引
+                    timestamp: utxo.timestamp,     // 交易时间戳
+                    type: utxo.type,              // 交易类型
+                    metadata: utxo.metadata        // 交易元数据（如果有）
+                }));
+
+                res.status(200).send({
+                    address: address,
+                    unspentTransactions: formattedUnspentTxs,
+                    totalAmount: formattedUnspentTxs.reduce((sum, tx) => sum + tx.amount, 0)
+                });
+            } catch (err) {
+                console.error('Error getting unspent transactions:', err);
+                res.status(500).send(err.message);
+            }
         });
 
         this.app.get('/operator/wallets', (req, res) => {

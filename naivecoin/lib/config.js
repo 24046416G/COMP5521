@@ -26,12 +26,12 @@ module.exports = {
         ]
     },
     pow: {
-        BLOCK_GENERATION_INTERVAL: 10, // 降低期望的出块时间为10秒
-        DIFFICULTY_ADJUSTMENT_INTERVAL: 10,  // 每10个区块调整一次难度
+        BLOCK_GENERATION_INTERVAL: 0.2, // 降低期望的出块时间为10秒
+        DIFFICULTY_ADJUSTMENT_INTERVAL: 5,  // 每10个区块调整一次难度
         
         getDifficulty: (blocks, index) => {
             // 如果区块数小于2，使用初始难度
-            if (blocks.length < 2) return 1;  // 设置初始难度为1
+            if (blocks.length < 2) return 0;  // 设置初始难度为0
             
             // 每DIFFICULTY_ADJUSTMENT_INTERVAL个区块调整一次
             if (blocks.length % module.exports.pow.DIFFICULTY_ADJUSTMENT_INTERVAL !== 0) {
@@ -50,7 +50,7 @@ module.exports = {
             if (timeTaken < timeExpected / 2) {
                 difficulty += 1;  // 如果出块太快，只增加1
             } else if (timeTaken > timeExpected * 2) {
-                difficulty = Math.max(difficulty - 1, 1);  // 如果出块太慢，只减少1，但不低于1
+                difficulty = Math.max(difficulty - 1, 0);  // 如果出块太慢，只减少1，但不低于0
             }
             
             return difficulty;
