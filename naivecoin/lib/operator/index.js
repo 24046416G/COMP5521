@@ -7,6 +7,7 @@ const Db = require('../util/db');
 const ArgumentError = require('../util/argumentError');
 const Config = require('../config');
 const CryptoUtil = require('../util/cryptoUtil');
+const CryptoEdDSAUtil = require('../util/cryptoEdDSAUtil');
 
 const OPERATOR_FILE = 'wallets.json';
 
@@ -222,6 +223,108 @@ class Operator {
         this.db.write(this.wallets);
         
         return totalBalance;
+    }
+
+    createAttendanceTransaction(walletId, password, courseId) {
+        let wallet = this.getWalletById(walletId);
+        if (wallet == null) throw new Error(`Wallet not found with id '${walletId}'`);
+
+        // 验证密码
+        let passwordHash = CryptoUtil.hash(password);
+        if (!this.checkWalletPassword(walletId, passwordHash)) {
+            throw new Error('Invalid password');
+        }
+
+        // 检查余额是否足够
+        if (wallet.balance < Config.ATTENDANCE_CONFIG.ATTENDANCE_AMOUNT) {
+            throw new Error(`Insufficient balance: required ${Config.ATTENDANCE_CONFIG.ATTENDANCE_AMOUNT}, but got ${wallet.balance}`);
+        }
+
+        // 获取学生的公钥和私钥
+        let studentPublicKey = wallet.getPublicKey();
+        let studentSecretKey = wallet.getSecretKey();
+        
+        if (!studentPublicKey || !studentSecretKey) {
+            throw new Error('No key pair found for wallet');
+        }
+
+        // 创建交易对象
+        let transactionData = {
+            id: CryptoUtil.randomId(),
+            hash: null,
+            type: Config.TRANSACTION_TYPE.ATTENDANCE,
+            data: {
+                inputs: [
+                    {
+                        transaction: wallet.id,
+                        index: "0",
+                        amount: Config.ATTENDANCE_CONFIG.ATTENDANCE_AMOUNT,
+                        address: studentPublicKey
+                    }
+                ],
+                outputs: [
+                    {
+                        amount: Config.ATTENDANCE_CONFIG.ATTENDANCE_AMOUNT,
+                        address: Config.ATTENDANCE_CONFIG.DEFAULT_TEACHER_ADDRESS,
+                        metadata: {
+                            studentId: wallet.studentId,
+                            courseId: courseId,
+                            timestamp: new Date().getTime(),
+                            attendanceType: "present",
+                            studentAddress: studentPublicKey
+                        }
+                    }
+                ]
+            }
+        };
+
+        try {
+            // 1. 先生成密钥对
+            const keyPair = CryptoEdDSAUtil.generateKeyPairFromSecret(studentSecretKey);
+            
+            // 2. 准备要签名的数据
+            const inputData = {
+                transaction: transactionData.data.inputs[0].transaction,
+                index: transactionData.data.inputs[0].index,
+                amount: transactionData.data.inputs[0].amount,
+                address: transactionData.data.inputs[0].address
+            };
+            
+            // 3. 计算数据哈希 - 修改这里的哈希计算方式
+            const dataToSign = CryptoUtil.hash(inputData);  // 直接对对象进行哈希
+            
+            // 4. 使用 CryptoEdDSAUtil 的 signHash 方法进行签名
+            const signature = CryptoEdDSAUtil.signHash(keyPair, dataToSign);
+            
+            // 5. 添加签名到输入
+            transactionData.data.inputs[0].signature = signature;
+            
+            // 6. 计算最终的交易哈希
+            transactionData.hash = CryptoUtil.hash(transactionData.id + JSON.stringify(transactionData.data));
+        } catch (err) {
+            console.error('Error during signing:', err);
+            throw new Error('Failed to sign transaction: ' + err.message);
+        }
+
+        // 更新学生钱包余额
+        wallet.updateBalance(wallet.balance - Config.ATTENDANCE_CONFIG.ATTENDANCE_AMOUNT);
+        this.db.write(this.wallets);
+
+        // 更新教师余额
+        const path = require('path');
+        const fs = require('fs');
+        const teacherJsonPath = path.join(__dirname, '../../data/teacher.json');
+        
+        let teacherConfig;
+        try {
+            teacherConfig = JSON.parse(fs.readFileSync(teacherJsonPath, 'utf8'));
+            teacherConfig.balance = (teacherConfig.balance || 0) + Config.ATTENDANCE_CONFIG.ATTENDANCE_AMOUNT;
+            fs.writeFileSync(teacherJsonPath, JSON.stringify(teacherConfig, null, 4));
+        } catch (err) {
+            console.error('Error updating teacher balance:', err);
+        }
+
+        return Transaction.fromJson(transactionData);
     }
 }
 

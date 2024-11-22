@@ -19,16 +19,31 @@ class CryptoEdDSAUtil {
     }
 
     static signHash(keyPair, messageHash) {
-        let signature = keyPair.sign(messageHash).toHex().toLowerCase();
-        console.debug(`Signature: \n${signature}`);
-        return signature;
+        try {
+            let signature = keyPair.sign(messageHash).toHex().toLowerCase();
+            console.debug(`Signature: \n${signature}`);
+            return signature;
+        } catch (err) {
+            console.error('Error in signHash:', err);
+            throw err;
+        }
     }
 
     static verifySignature(publicKey, signature, messageHash) {
-        let key = ec.keyFromPublic(publicKey, 'hex');
-        let verified = key.verify(messageHash, signature);
-        console.debug(`Verified: ${verified}`);
-        return verified;
+        try {
+            let key = ec.keyFromPublic(publicKey, 'hex');
+            let verified = key.verify(messageHash, signature);
+            console.debug(`Signature verification:
+                Public Key: ${publicKey}
+                Message Hash: ${messageHash}
+                Signature: ${signature}
+                Verified: ${verified}
+            `);
+            return verified;
+        } catch (err) {
+            console.error('Error in verifySignature:', err);
+            return false;
+        }
     }
 
     static toHex(data) {

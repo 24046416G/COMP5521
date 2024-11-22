@@ -310,6 +310,27 @@ class HttpServer {
             }
         });
 
+        this.app.post('/student/attendance/:walletId', (req, res) => {
+            let { password, courseId } = req.body;
+            let walletId = req.params.walletId;
+            
+            try {
+                // 创建考勤交易
+                let transaction = this.operator.createAttendanceTransaction(
+                    walletId, 
+                    password, 
+                    courseId
+                );
+                
+                // 添加交易到区块链
+                this.blockchain.addTransaction(transaction);
+                
+                res.status(201).send(transaction);
+            } catch (err) {
+                res.status(400).send(err.message);
+            }
+        });
+
         this.app.use(function (err, req, res, next) {  // eslint-disable-line no-unused-vars
             if (err instanceof HTTPError) res.status(err.status);
             else res.status(500);

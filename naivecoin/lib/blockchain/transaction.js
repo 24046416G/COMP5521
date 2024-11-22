@@ -60,20 +60,18 @@ class Transaction {
         }
 
         // Check if the signature of all input transactions are correct (transaction data is signed by the public key of the address)
-        R.map((txInput) => {
+        R.forEach((txInput) => {
             let txInputHash = CryptoUtil.hash({
                 transaction: txInput.transaction,
                 index: txInput.index,
+                amount: txInput.amount,
                 address: txInput.address
             });
-            let isValidSignature = CryptoEdDSAUtil.verifySignature(txInput.address, txInput.signature, txInputHash);
-
-            if (!isValidSignature) {
-                console.error(`Invalid transaction input signature '${JSON.stringify(txInput)}'`);
-                throw new TransactionAssertionError(`Invalid transaction input signature '${JSON.stringify(txInput)}'`, txInput);
+            
+            if (!CryptoEdDSAUtil.verifySignature(txInput.address, txInput.signature, txInputHash)) {
+                throw new TransactionAssertionError(`Invalid transaction input signature '${JSON.stringify(txInput)}'`);
             }
         }, this.data.inputs);
-
 
         if (this.type == 'regular') {
             // Check if the sum of input transactions are greater than output transactions, it needs to leave some room for the transaction fee
