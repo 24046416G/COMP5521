@@ -26,7 +26,7 @@ module.exports = {
         ]
     },
     pow: {
-        BLOCK_GENERATION_INTERVAL: 10 * 60, // 期望的出块时间(秒)
+        BLOCK_GENERATION_INTERVAL: 1, // 期望的出块时间(秒)
         DIFFICULTY_ADJUSTMENT_INTERVAL: 10,  // 每10个区块调整一次难度
         
         getDifficulty: (blocks, index) => {
