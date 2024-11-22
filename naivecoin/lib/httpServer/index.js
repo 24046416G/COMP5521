@@ -334,6 +334,141 @@ class HttpServer {
             }
         });
 
+        // 添加辅助函数来处理日期
+        const getDateRange = (startDate, endDate) => {
+            // 开始日期：如果提供了日期，使用当天开始时间；否则使用最早时间
+            const start = startDate 
+                ? new Date(startDate).setHours(0, 0, 0, 0) 
+                : new Date(0);
+
+            // 结束日期：如果提供了日期，使用当天结束时间；否则使用当前时间
+            const end = endDate 
+                ? new Date(endDate).setHours(23, 59, 59, 999)
+                : new Date().getTime();
+
+            return { start: new Date(start), end: new Date(end) };
+        };
+
+        // 1. 通过学生ID搜索考勤记录
+        this.app.get('/attendance/student/:studentId', (req, res) => {
+            try {
+                const { startDate, endDate, courseId, classId } = req.query;
+                const studentId = req.params.studentId;
+                const { start, end } = getDateRange(startDate, endDate);
+
+                const blocks = this.blockchain.getAllBlocks();
+                let attendanceRecords = blocks
+                    .reduce((records, block) => {
+                        const blockAttendances = block.transactions
+                            .filter(tx => tx.type === 'attendance')
+                            .filter(tx => {
+                                const metadata = tx.data.outputs[0].metadata;
+                                const recordDate = new Date(metadata.timestamp);
+
+                                return metadata.studentId.includes(studentId) &&
+                                    (!courseId || metadata.courseId === courseId) &&
+                                    (!classId || metadata.classId === classId) &&
+                                    recordDate >= start &&
+                                    recordDate <= end;
+                            })
+                            .map(tx => ({
+                                blockIndex: block.index,
+                                timestamp: new Date(tx.data.outputs[0].metadata.timestamp).toISOString(),
+                                studentId: tx.data.outputs[0].metadata.studentId,
+                                courseId: tx.data.outputs[0].metadata.courseId,
+                                classId: tx.data.outputs[0].metadata.classId,
+                                attendanceType: tx.data.outputs[0].metadata.attendanceType
+                            }));
+
+                        return [...records, ...blockAttendances];
+                    }, []);
+
+                res.status(200).send(attendanceRecords);
+            } catch (err) {
+                res.status(500).send(err.message);
+            }
+        });
+
+        // 2. 通过课程ID搜索考勤记录
+        this.app.get('/attendance/course/:courseId', (req, res) => {
+            try {
+                const { startDate, endDate, classId, studentId } = req.query;
+                const courseId = req.params.courseId;
+                const { start, end } = getDateRange(startDate, endDate);
+
+                const blocks = this.blockchain.getAllBlocks();
+                let attendanceRecords = blocks
+                    .reduce((records, block) => {
+                        const blockAttendances = block.transactions
+                            .filter(tx => tx.type === 'attendance')
+                            .filter(tx => {
+                                const metadata = tx.data.outputs[0].metadata;
+                                const recordDate = new Date(metadata.timestamp);
+
+                                return metadata.courseId === courseId &&
+                                    (!studentId || metadata.studentId === studentId) &&
+                                    (!classId || metadata.classId === classId) &&
+                                    recordDate >= start &&
+                                    recordDate <= end;
+                            })
+                            .map(tx => ({
+                                blockIndex: block.index,
+                                timestamp: new Date(tx.data.outputs[0].metadata.timestamp).toISOString(),
+                                studentId: tx.data.outputs[0].metadata.studentId,
+                                courseId: tx.data.outputs[0].metadata.courseId,
+                                classId: tx.data.outputs[0].metadata.classId,
+                                attendanceType: tx.data.outputs[0].metadata.attendanceType
+                            }));
+
+                        return [...records, ...blockAttendances];
+                    }, []);
+
+                res.status(200).send(attendanceRecords);
+            } catch (err) {
+                res.status(500).send(err.message);
+            }
+        });
+
+        // 3. 通过班级ID搜索考勤记录
+        this.app.get('/attendance/class/:classId', (req, res) => {
+            try {
+                const { startDate, endDate, courseId, studentId } = req.query;
+                const classId = req.params.classId;
+                const { start, end } = getDateRange(startDate, endDate);
+
+                const blocks = this.blockchain.getAllBlocks();
+                let attendanceRecords = blocks
+                    .reduce((records, block) => {
+                        const blockAttendances = block.transactions
+                            .filter(tx => tx.type === 'attendance')
+                            .filter(tx => {
+                                const metadata = tx.data.outputs[0].metadata;
+                                const recordDate = new Date(metadata.timestamp);
+
+                                return metadata.classId === classId &&
+                                    (!studentId || metadata.studentId === studentId) &&
+                                    (!courseId || metadata.courseId === courseId) &&
+                                    recordDate >= start &&
+                                    recordDate <= end;
+                            })
+                            .map(tx => ({
+                                blockIndex: block.index,
+                                timestamp: new Date(tx.data.outputs[0].metadata.timestamp).toISOString(),
+                                studentId: tx.data.outputs[0].metadata.studentId,
+                                courseId: tx.data.outputs[0].metadata.courseId,
+                                classId: tx.data.outputs[0].metadata.classId,
+                                attendanceType: tx.data.outputs[0].metadata.attendanceType
+                            }));
+
+                        return [...records, ...blockAttendances];
+                    }, []);
+
+                res.status(200).send(attendanceRecords);
+            } catch (err) {
+                res.status(500).send(err.message);
+            }
+        });
+
         this.app.use(function (err, req, res, next) {  // eslint-disable-line no-unused-vars
             if (err instanceof HTTPError) res.status(err.status);
             else res.status(500);
