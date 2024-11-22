@@ -26,12 +26,12 @@ module.exports = {
         ]
     },
     pow: {
-        BLOCK_GENERATION_INTERVAL: 1, // 期望的出块时间(秒)
+        BLOCK_GENERATION_INTERVAL: 10, // 降低期望的出块时间为10秒
         DIFFICULTY_ADJUSTMENT_INTERVAL: 10,  // 每10个区块调整一次难度
         
         getDifficulty: (blocks, index) => {
-            // 如果区块数小于调整间隔，使用初始难度
-            if (blocks.length < 2) return Number.MAX_SAFE_INTEGER;
+            // 如果区块数小于2，使用初始难度
+            if (blocks.length < 2) return 1;  // 设置初始难度为1
             
             // 每DIFFICULTY_ADJUSTMENT_INTERVAL个区块调整一次
             if (blocks.length % module.exports.pow.DIFFICULTY_ADJUSTMENT_INTERVAL !== 0) {
@@ -48,12 +48,12 @@ module.exports = {
             let difficulty = prevAdjustmentBlock.difficulty;
             
             if (timeTaken < timeExpected / 2) {
-                difficulty *= 2; // 如果出块太快，增加难度
+                difficulty += 1;  // 如果出块太快，只增加1
             } else if (timeTaken > timeExpected * 2) {
-                difficulty /= 2; // 如果出块太慢，降低难度
+                difficulty = Math.max(difficulty - 1, 1);  // 如果出块太慢，只减少1，但不低于1
             }
             
-            return Math.max(Math.floor(difficulty), 1);
+            return difficulty;
         }
     },
     // 交易类型定义

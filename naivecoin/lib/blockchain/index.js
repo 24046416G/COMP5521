@@ -74,6 +74,7 @@ class Blockchain {
         return R.find(R.compose(R.find(R.propEq('id', transactionId)), R.prop('transactions')), this.blocks);
     }
 
+    //Fork 处理
     replaceChain(newBlockchain) {
         // 如果新链比当前链短，直接拒绝
         if (newBlockchain.length <= this.blocks.length) {
