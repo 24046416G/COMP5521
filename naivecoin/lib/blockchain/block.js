@@ -35,9 +35,8 @@ class Block {
     }
 
     getDifficulty() {
-        // 简化难度计算
-        const difficulty = parseInt(this.hash.substring(0, 4), 16);
-        return difficulty;
+        // 14 is the maximum precision length supported by javascript
+        return parseInt(this.hash.substring(0, 14), 16);
     }
 
     static get genesis() {

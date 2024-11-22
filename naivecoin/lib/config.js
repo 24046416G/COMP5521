@@ -26,34 +26,21 @@ module.exports = {
         ]
     },
     pow: {
-        BLOCK_GENERATION_INTERVAL: 0.2, // 降低期望的出块时间为10秒
-        DIFFICULTY_ADJUSTMENT_INTERVAL: 5,  // 每10个区块调整一次难度
-        
         getDifficulty: (blocks, index) => {
-            // 如果区块数小于2，使用初始难度
-            if (blocks.length < 2) return 0;  // 设置初始难度为0
-            
-            // 每DIFFICULTY_ADJUSTMENT_INTERVAL个区块调整一次
-            if (blocks.length % module.exports.pow.DIFFICULTY_ADJUSTMENT_INTERVAL !== 0) {
-                return blocks[blocks.length - 1].difficulty;
-            }
-            
-            // 计算前一组区块的实际出块时间
-            const prevAdjustmentBlock = blocks[blocks.length - module.exports.pow.DIFFICULTY_ADJUSTMENT_INTERVAL];
-            const latestBlock = blocks[blocks.length - 1];
-            const timeExpected = module.exports.pow.BLOCK_GENERATION_INTERVAL * module.exports.pow.DIFFICULTY_ADJUSTMENT_INTERVAL;
-            const timeTaken = latestBlock.timestamp - prevAdjustmentBlock.timestamp;
-            
-            // 根据时间差调整难度
-            let difficulty = prevAdjustmentBlock.difficulty;
-            
-            if (timeTaken < timeExpected / 2) {
-                difficulty += 1;  // 如果出块太快，只增加1
-            } else if (timeTaken > timeExpected * 2) {
-                difficulty = Math.max(difficulty - 1, 0);  // 如果出块太慢，只减少1，但不低于0
-            }
-            
-            return difficulty;
+            // Proof-of-work difficulty settings
+            const BASE_DIFFICULTY = Number.MAX_SAFE_INTEGER;
+            const EVERY_X_BLOCKS = 5;
+            const POW_CURVE = 5;
+
+            // INFO: The difficulty is the formula that naivecoin choose to check the proof a work, this number is later converted to base 16 to represent the minimal initial hash expected value.
+            // INFO: This could be a formula based on time. Eg.: Check how long it took to mine X blocks over a period of time and then decrease/increase the difficulty based on that. See https://en.bitcoin.it/wiki/Difficulty
+            return Math.max(
+                Math.floor(
+                    BASE_DIFFICULTY / Math.pow(
+                        Math.floor(((index || blocks.length) + 1) / EVERY_X_BLOCKS) + 1
+                        , POW_CURVE)
+                )
+                , 0);
         }
     },
     // 交易类型定义
