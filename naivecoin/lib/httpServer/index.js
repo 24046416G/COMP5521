@@ -1,6 +1,7 @@
 const express = require('express');
 const bodyParser = require('body-parser');
 const swaggerUi = require('swagger-ui-express');
+const cors = require('cors');
 const R = require('ramda');
 const path = require('path');
 const swaggerDocument = require('./swagger.json');
@@ -20,6 +21,15 @@ class HttpServer {
         this.blockchain = blockchain;
         this.operator = operator;
         this.miner = miner;
+
+        this.app.use(cors({
+            origin: 'http://127.0.0.1:5173',
+            credentials: false,
+            methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+            allowedHeaders: ['Content-Type', 'Authorization', 'password']
+        }));
+
+        this.app.options('*', cors());
 
         const projectWallet = (wallet) => {
             return {
