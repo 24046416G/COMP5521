@@ -311,7 +311,7 @@ class HttpServer {
         });
 
         this.app.post('/student/attendance/:walletId', (req, res) => {
-            let { password, courseId } = req.body;
+            let { password, courseId, classId } = req.body;
             let walletId = req.params.walletId;
             
             try {
@@ -319,7 +319,8 @@ class HttpServer {
                 let transaction = this.operator.createAttendanceTransaction(
                     walletId, 
                     password, 
-                    courseId
+                    courseId,
+                    classId
                 );
                 
                 // 添加交易到区块链

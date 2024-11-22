@@ -225,7 +225,7 @@ class Operator {
         return totalBalance;
     }
 
-    createAttendanceTransaction(walletId, password, courseId) {
+    createAttendanceTransaction(walletId, password, courseId, classId) {
         let wallet = this.getWalletById(walletId);
         if (wallet == null) throw new Error(`Wallet not found with id '${walletId}'`);
 
@@ -269,7 +269,7 @@ class Operator {
                         metadata: {
                             studentId: wallet.studentId,
                             courseId: courseId,
-                            classId: courseId,
+                            classId: classId,
                             timestamp: new Date().getTime(),
                             attendanceType: "present",
                             studentAddress: studentPublicKey

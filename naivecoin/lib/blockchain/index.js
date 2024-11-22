@@ -200,36 +200,57 @@ class Blockchain {
         // For each transaction in this block, check if it is valid
         R.forEach(this.checkTransaction.bind(this), newBlock.transactions, referenceBlockchain);
 
-        // Check if the sum of output transactions are equal the sum of input transactions + MINING_REWARD (representing the reward for the block miner)
-        let sumOfInputsAmount = R.sum(R.flatten(R.map(R.compose(R.map(R.prop('amount')), R.prop('inputs'), R.prop('data')), newBlock.transactions))) + Config.MINING_REWARD;
-        let sumOfOutputsAmount = R.sum(R.flatten(R.map(R.compose(R.map(R.prop('amount')), R.prop('outputs'), R.prop('data')), newBlock.transactions)));
+        // 计算区块中所有交易的输入和输出总和
+        let inputSum = 0;
+        let outputSum = 0;
 
-        let isInputsAmountGreaterOrEqualThanOutputsAmount = R.gte(sumOfInputsAmount, sumOfOutputsAmount);
+        // 遍历区块中的所有交易
+        for (let transaction of newBlock.transactions) {
+            // 对于挖矿奖励交易，只计算输出
+            if (transaction.type === 'reward') {
+                outputSum += R.sum(R.map(R.prop('amount'), transaction.data.outputs));
+                continue;
+            }
 
-        if (!isInputsAmountGreaterOrEqualThanOutputsAmount) {
-            console.error(`Invalid block balance: inputs sum '${sumOfInputsAmount}', outputs sum '${sumOfOutputsAmount}'`);
-            throw new BlockAssertionError(`Invalid block balance: inputs sum '${sumOfInputsAmount}', outputs sum '${sumOfOutputsAmount}'`, { sumOfInputsAmount, sumOfOutputsAmount });
+            // 对于手续费交易，只计算输出
+            if (transaction.type === 'fee') {
+                outputSum += R.sum(R.map(R.prop('amount'), transaction.data.outputs));
+                continue;
+            }
+
+            // 对于学生注册和考勤交易，不计入总和
+            if (transaction.type === 'studentRegistration' || transaction.type === 'attendance') {
+                continue;
+            }
+
+            // 计算常规交易的输入总和
+            if (transaction.data.inputs.length > 0) {
+                inputSum += R.sum(R.map(R.prop('amount'), transaction.data.inputs));
+            }
+
+            // 计算常规交易的输出总和
+            if (transaction.data.outputs.length > 0) {
+                outputSum += R.sum(R.map(R.prop('amount'), transaction.data.outputs));
+            }
         }
 
-        // Check if there is double spending
-        let listOfTransactionIndexInputs = R.flatten(R.map(R.compose(R.map(R.compose(R.join('|'), R.props(['transaction', 'index']))), R.prop('inputs'), R.prop('data')), newBlock.transactions));
-        let doubleSpendingList = R.filter((x) => x >= 2, R.map(R.length, R.groupBy(x => x)(listOfTransactionIndexInputs)));
+        // 获取挖矿奖励金额
+        const rewardTransaction = newBlock.transactions.find(tx => tx.type === 'reward');
+        const miningReward = rewardTransaction ? R.sum(R.map(R.prop('amount'), rewardTransaction.data.outputs)) : 0;
 
-        if (R.keys(doubleSpendingList).length) {
-            console.error(`There are unspent output transactions being used more than once: unspent output transaction: '${R.keys(doubleSpendingList).join(', ')}'`);
-            throw new BlockAssertionError(`There are unspent output transactions being used more than once: unspent output transaction: '${R.keys(doubleSpendingList).join(', ')}'`);
-        }
+        // 获取手续费金额
+        const feeTransaction = newBlock.transactions.find(tx => tx.type === 'fee');
+        const fees = feeTransaction ? R.sum(R.map(R.prop('amount'), feeTransaction.data.outputs)) : 0;
 
-        // Check if there is only 1 fee transaction and 1 reward transaction;
-        let transactionsByType = R.countBy(R.prop('type'), newBlock.transactions);
-        if (transactionsByType.fee && transactionsByType.fee > 1) {
-            console.error(`Invalid fee transaction count: expected '1' got '${transactionsByType.fee}'`);
-            throw new BlockAssertionError(`Invalid fee transaction count: expected '1' got '${transactionsByType.fee}'`);
-        }
+        // 验证输入和输出总和
+        // 输出总和应该等于：输入总和 + 挖矿奖励 + 手续费
+        const expectedOutputSum = inputSum + miningReward + fees;
 
-        if (transactionsByType.reward && transactionsByType.reward > 1) {
-            console.error(`Invalid reward transaction count: expected '1' got '${transactionsByType.reward}'`);
-            throw new BlockAssertionError(`Invalid reward transaction count: expected '1' got '${transactionsByType.reward}'`);
+        if (outputSum !== expectedOutputSum) {
+            console.error(`Invalid block balance: inputs sum '${inputSum}', outputs sum '${outputSum}'`);
+            console.error(`Mining reward: ${miningReward}, Fees: ${fees}`);
+            console.error(`Expected output sum: ${expectedOutputSum}`);
+            throw new BlockAssertionError(`Invalid block balance: inputs sum '${inputSum}', outputs sum '${outputSum}'`);
         }
 
         return true;
@@ -362,6 +383,65 @@ class Blockchain {
                  tx.type === Config.TRANSACTION_TYPE.ATTENDANCE) &&
                 tx.data.outputs[0].address === teacherAddress
             );
+    }
+
+    updateMiningReward(block) {
+        try {
+            // 找到奖励交易和手续费交易
+            const rewardTransaction = block.transactions.find(tx => tx.type === 'reward');
+            const feeTransaction = block.transactions.find(tx => tx.type === 'fee');
+
+            if (!rewardTransaction && !feeTransaction) {
+                console.info('No reward or fee transactions found in block');
+                return;
+            }
+
+            // 计算总奖励金额
+            const rewardAmount = rewardTransaction ? rewardTransaction.data.outputs[0].amount : 0;
+            const feeAmount = feeTransaction ? feeTransaction.data.outputs[0].amount : 0;
+            const totalReward = rewardAmount + feeAmount;
+
+            // 获取矿工地址
+            const minerAddress = rewardTransaction ? rewardTransaction.data.outputs[0].address : null;
+            if (!minerAddress) {
+                console.error('No miner address found in reward transaction');
+                return;
+            }
+
+            // 读取钱包文件
+            const path = require('path');
+            const fs = require('fs');
+            const walletsPath = path.join(__dirname, '../../data/1/wallets.json');
+            
+            let wallets = [];
+            try {
+                const walletsData = fs.readFileSync(walletsPath, 'utf8');
+                wallets = JSON.parse(walletsData);
+            } catch (err) {
+                console.error('Error reading wallets file:', err);
+                return;
+            }
+
+            // 找到矿工的钱包
+            const minerWallet = wallets.find(w => 
+                w.keyPairs.some(kp => kp.publicKey === minerAddress)
+            );
+
+            if (minerWallet) {
+                // 更新余额
+                minerWallet.balance = (parseInt(minerWallet.balance) || 0) + totalReward;
+                
+                // 保存更新后的钱包数据
+                fs.writeFileSync(walletsPath, JSON.stringify(wallets, null, 4));
+                
+                console.info(`Updated miner wallet balance: +${totalReward} (reward: ${rewardAmount}, fee: ${feeAmount})`);
+                console.info(`New balance for miner ${minerAddress}: ${minerWallet.balance}`);
+            } else {
+                console.error(`Miner wallet not found for address: ${minerAddress}`);
+            }
+        } catch (err) {
+            console.error('Error updating mining reward:', err);
+        }
     }
 }
 

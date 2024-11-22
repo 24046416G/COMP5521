@@ -53,8 +53,8 @@ class Miner {
 
     static generateNextBlock(rewardAddress, feeAddress, blockchain) {
         const previousBlock = blockchain.getLastBlock();
-        const index = previousBlock.index + 1;
-        const previousHash = previousBlock.hash;
+        const nextIndex = previousBlock ? previousBlock.index + 1 : 0;
+        const previousHash = previousBlock ? previousBlock.hash : '0';
         const timestamp = new Date().getTime() / 1000;
         const blocks = blockchain.getAllBlocks();
         const candidateTransactions = blockchain.transactions;
@@ -64,54 +64,61 @@ class Miner {
         // Select transactions that can be mined         
         let rejectedTransactions = [];
         let selectedTransactions = [];
-        R.forEach((transaction) => {
-            let negativeOutputsFound = 0;
-            let i = 0;
-            let outputsLen = transaction.data.outputs.length;
+        
+        // 处理候选交易
+        if (candidateTransactions && candidateTransactions.length > 0) {
+            R.forEach((transaction) => {
+                try {
+                    // 确保交易是 Transaction 实例
+                    const tx = Transaction.fromJson(transaction);
+                    
+                    // 验证交易
+                    if (tx.type === 'studentRegistration' || tx.type === 'attendance') {
+                        selectedTransactions.push(tx);
+                    } else {
+                        // 其他类型交易的验证逻辑
+                        let negativeOutputsFound = 0;
+                        let outputsLen = tx.data.outputs.length;
 
-            // Check for negative outputs (avoiding negative transactions or 'stealing')
-            for (i = 0; i < outputsLen; i++) {
-                if (transaction.data.outputs[i].amount < 0) {
-                    negativeOutputsFound++;
-                }
-            }
-            // Check if any of the inputs is found in the selectedTransactions or in the blockchain
-            let transactionInputFoundAnywhere = R.map((input) => {
-                let findInputTransactionInTransactionList = R.find(
-                    R.whereEq({
-                        'transaction': input.transaction,
-                        'index': input.index
-                    }));
+                        for (let i = 0; i < outputsLen; i++) {
+                            if (tx.data.outputs[i].amount < 0) {
+                                negativeOutputsFound++;
+                            }
+                        }
 
-                // Find the candidate transaction in the selected transaction list (avoiding double spending)
-                let wasItFoundInSelectedTransactions = R.not(R.isNil(findInputTransactionInTransactionList(inputTransactionsInTransaction(selectedTransactions))));
+                        let transactionInputFoundAnywhere = R.map((input) => {
+                            let findInputTransactionInTransactionList = R.find(
+                                R.whereEq({
+                                    'transaction': input.transaction,
+                                    'index': input.index
+                                }));
 
-                // Find the candidate transaction in the blockchain (avoiding mining invalid transactions)
-                let wasItFoundInBlocks = R.not(R.isNil(findInputTransactionInTransactionList(inputTransactionsInTransaction(transactionsInBlocks))));
+                            let wasItFoundInSelectedTransactions = R.not(R.isNil(findInputTransactionInTransactionList(inputTransactionsInTransaction(selectedTransactions))));
+                            let wasItFoundInBlocks = R.not(R.isNil(findInputTransactionInTransactionList(inputTransactionsInTransaction(transactionsInBlocks))));
 
-                return wasItFoundInSelectedTransactions || wasItFoundInBlocks;
-            }, transaction.data.inputs);
+                            return wasItFoundInSelectedTransactions || wasItFoundInBlocks;
+                        }, tx.data.inputs);
 
-            if (R.all(R.equals(false), transactionInputFoundAnywhere)) {
-                if (transaction.type === 'regular' && negativeOutputsFound === 0) {
-                    selectedTransactions.push(transaction);
-                } else if (transaction.type === 'reward') {
-                    selectedTransactions.push(transaction);
-                } else if (negativeOutputsFound > 0) {
+                        if (R.all(R.equals(false), transactionInputFoundAnywhere)) {
+                            if (tx.type === 'regular' && negativeOutputsFound === 0) {
+                                selectedTransactions.push(tx);
+                            }
+                        }
+                    }
+                } catch (err) {
+                    console.error('Error processing transaction:', err);
                     rejectedTransactions.push(transaction);
                 }
-            } else {
-                rejectedTransactions.push(transaction);
-            }
-        }, candidateTransactions);
+            }, candidateTransactions);
+        }
 
-        console.info(`Selected ${selectedTransactions.length} candidate transactions with ${rejectedTransactions.length} being rejected.`);
+        console.info(`Selected ${selectedTransactions.length} transactions for new block`);
 
-        // Get the first two avaliable transactions, if there aren't TRANSACTIONS_PER_BLOCK, it's empty
-        let transactions = R.defaultTo([], R.take(Config.TRANSACTIONS_PER_BLOCK, selectedTransactions));
+        // 创建区块的交易列表
+        let transactions = selectedTransactions;
 
-        // Add fee transaction (1 satoshi per transaction)        
-        if (transactions.length > 0) {
+        // Add fee transaction if needed
+        if (transactions.length > 0 && feeAddress) {
             let feeTransaction = Transaction.fromJson({
                 id: CryptoUtil.randomId(64),
                 hash: null,
@@ -120,18 +127,17 @@ class Miner {
                     inputs: [],
                     outputs: [
                         {
-                            amount: Config.FEE_PER_TRANSACTION * transactions.length, // satoshis format
-                            address: feeAddress, // INFO: Usually here is a locking script (to check who and when this transaction output can be used), in this case it's a simple destination address 
+                            amount: Config.FEE_PER_TRANSACTION * transactions.length,
+                            address: feeAddress
                         }
                     ]
                 }
             });
-
             transactions.push(feeTransaction);
         }
 
-        // Add reward transaction of 50 coins
-        if (rewardAddress != null) {
+        // Add reward transaction
+        if (rewardAddress) {
             let rewardTransaction = Transaction.fromJson({
                 id: CryptoUtil.randomId(64),
                 hash: null,
@@ -140,22 +146,21 @@ class Miner {
                     inputs: [],
                     outputs: [
                         {
-                            amount: Config.MINING_REWARD, // satoshis format
-                            address: rewardAddress, // INFO: Usually here is a locking script (to check who and when this transaction output can be used), in this case it's a simple destination address 
+                            amount: Config.MINING_REWARD,
+                            address: rewardAddress
                         }
                     ]
                 }
             });
-
             transactions.push(rewardTransaction);
         }
 
         return Block.fromJson({
-            index,
-            nonce: 0,
-            previousHash,
-            timestamp,
-            transactions
+            index: nextIndex,
+            previousHash: previousHash,
+            timestamp: timestamp,
+            transactions: transactions,
+            nonce: 0
         });
     }
 
