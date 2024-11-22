@@ -272,11 +272,6 @@ class Operator {
             throw new Error('Invalid password');
         }
 
-        // 检查余额是否足够
-        if (wallet.balance < Config.ATTENDANCE_CONFIG.ATTENDANCE_AMOUNT) {
-            throw new Error(`Insufficient balance: required ${Config.ATTENDANCE_CONFIG.ATTENDANCE_AMOUNT}, but got ${wallet.balance}`);
-        }
-
         // 获取学生的公钥和私钥
         let studentPublicKey = wallet.getPublicKey();
         let studentSecretKey = wallet.getSecretKey();
@@ -284,6 +279,19 @@ class Operator {
         if (!studentPublicKey || !studentSecretKey) {
             throw new Error('No key pair found for wallet');
         }
+
+        // 获取学生的未花费交易
+        const unspentTxs = this.blockchain.getUnspentTransactionsForAddress(studentPublicKey);
+        if (unspentTxs.length === 0) {
+            throw new Error('No unspent transactions found for student');
+        }
+
+        // 选择一个未花费的交易作为输入
+        const unspentTx = unspentTxs[0];
+        const inputAmount = unspentTx.amount;
+
+        // 计算找零金额
+        const changeAmount = inputAmount - Config.ATTENDANCE_CONFIG.ATTENDANCE_AMOUNT;
 
         // 创建交易对象
         let transactionData = {
@@ -293,14 +301,15 @@ class Operator {
             data: {
                 inputs: [
                     {
-                        transaction: wallet.id,
-                        index: "0",
-                        amount: Config.ATTENDANCE_CONFIG.ATTENDANCE_AMOUNT,
+                        transaction: unspentTx.transaction,
+                        index: unspentTx.index,
+                        amount: inputAmount,
                         address: studentPublicKey
                     }
                 ],
                 outputs: [
                     {
+                        // 给老师的考勤费
                         amount: Config.ATTENDANCE_CONFIG.ATTENDANCE_AMOUNT,
                         address: Config.ATTENDANCE_CONFIG.DEFAULT_TEACHER_ADDRESS,
                         metadata: {
@@ -311,6 +320,11 @@ class Operator {
                             attendanceType: "present",
                             studentAddress: studentPublicKey
                         }
+                    },
+                    {
+                        // 找零返回给学生
+                        amount: changeAmount,
+                        address: studentPublicKey
                     }
                 ]
             }
@@ -338,7 +352,7 @@ class Operator {
         transactionData.hash = CryptoUtil.hash(transactionData.id + JSON.stringify(transactionData.data));
 
         // 更新学生钱包余额
-        wallet.updateBalance(wallet.balance - Config.ATTENDANCE_CONFIG.ATTENDANCE_AMOUNT);
+        wallet.updateBalance(changeAmount);
         this.db.write(this.wallets);
 
         // 更新教师余额

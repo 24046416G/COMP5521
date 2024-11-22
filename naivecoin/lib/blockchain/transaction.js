@@ -145,13 +145,13 @@ class Transaction {
     // 添加考勤交易的验证方法
     checkAttendance() {
         // 验证输入
-        if (this.data.inputs.length !== 1) {
-            throw new TransactionAssertionError('Attendance must have exactly one input');
+        if (this.data.inputs.length <= 0) {
+            throw new TransactionAssertionError('Attendance must have more than or equal to one input');
         }
 
         // 验证输出
-        if (this.data.outputs.length !== 1) {
-            throw new TransactionAssertionError('Attendance must have exactly one output');
+        if (this.data.outputs.length !== 2) {
+            throw new TransactionAssertionError('Attendance must have exactly two outputs');
         }
 
         const output = this.data.outputs[0];
