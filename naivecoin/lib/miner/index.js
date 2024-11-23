@@ -13,42 +13,33 @@ class Miner {
 
     mine(rewardAddress, feeAddress) {
         let baseBlock = Miner.generateNextBlock(rewardAddress, feeAddress, this.blockchain);
-        process.execArgv = R.reject((item) => item.includes('debug'), process.execArgv);
-
-        /* istanbul ignore next */
-        const thread = spawn(function (input, done) {
-            /*eslint-disable */
-            require(input.__dirname + '/../util/consoleWrapper.js')('mine-worker', input.logLevel);
-            const Block = require(input.__dirname + '/../blockchain/block');
-            const Miner = require(input.__dirname);
-            /*eslint-enable */
-
-            done(Miner.proveWorkFor(Block.fromJson(input.jsonBlock), input.difficulty));
+        let difficulty = this.blockchain.getDifficulty(baseBlock.index);
+        
+        return new Promise((resolve, reject) => {
+            try {
+                // 设置区块难度
+                baseBlock.difficulty = difficulty;
+                console.log(`Mining block ${baseBlock.index} with difficulty ${difficulty}`);
+                
+                // 简化的挖矿过程
+                let nonce = 0;
+                const prefix = '0'.repeat(difficulty);
+                
+                while (true) {
+                    baseBlock.nonce = nonce;
+                    baseBlock.hash = baseBlock.toHash();
+                    
+                    if (baseBlock.hash.startsWith(prefix)) {
+                        console.info(`Block found: difficulty '${difficulty}' hash '${baseBlock.hash}' nonce '${nonce}'`);
+                        resolve(baseBlock);
+                        break;
+                    }
+                    nonce++;
+                }
+            } catch (ex) {
+                reject(ex);
+            }
         });
-
-        const transactionList = R.pipe(
-            R.countBy(R.prop('type')),
-            R.toString,
-            R.replace('{', ''),
-            R.replace('}', ''),
-            R.replace(/"/g, '')
-        )(baseBlock.transactions);
-
-        console.info(`Mining a new block with ${baseBlock.transactions.length} (${transactionList}) transactions`);
-
-        const promise = thread.promise().then((result) => {
-            thread.kill();
-            return result;
-        });
-
-        thread.send({
-            __dirname: __dirname,
-            logLevel: this.logLevel,
-            jsonBlock: baseBlock,
-            difficulty: this.blockchain.getDifficulty()
-        });
-
-        return promise;
     }
 
     static generateNextBlock(rewardAddress, feeAddress, blockchain) {

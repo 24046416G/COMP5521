@@ -203,7 +203,7 @@ class HttpServer {
                 const wallet = wallets.find(w => w.id === req.params.walletId);
                 if (!wallet) throw new Error(`Wallet not found with id '${req.params.walletId}'`);
                 
-                // 返回钱包信息
+                // 返回钱��信息
                 res.status(200).send({
                     id: wallet.id,
                     addresses: wallet.keyPairs,
@@ -288,6 +288,9 @@ class HttpServer {
             miner.mine(req.body.rewardAddress, teacherConfig.address)
                 .then((newBlock) => {
                     newBlock = Block.fromJson(newBlock);
+                    newBlock.difficulty = blockchain.getDifficulty(newBlock.index);
+                    newBlock.hash = newBlock.toHash();
+                    
                     blockchain.addBlock(newBlock);
                     blockchain.updateMiningReward(newBlock);
                     res.status(201).send(newBlock);

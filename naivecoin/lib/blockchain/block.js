@@ -26,21 +26,34 @@ const Config = require('../config');
 
 class Block {
     constructor() {
+        this.index = 0;
+        this.previousHash = '0';
+        this.timestamp = 0;
+        this.nonce = 0;
+        this.transactions = [];
         this.difficulty = 0;
+        this.hash = '';
     }
 
     toHash() {
-        // INFO: There are different implementations of the hash algorithm, for example: https://en.bitcoin.it/wiki/Hashcash
-        return CryptoUtil.hash(this.index + this.previousHash + this.timestamp + JSON.stringify(this.transactions) + this.nonce);
+        // 简化哈希计算，不包含 difficulty
+        const blockData = {
+            index: this.index,
+            previousHash: this.previousHash,
+            timestamp: this.timestamp,
+            nonce: this.nonce,
+            transactions: this.transactions
+        };
+        return CryptoUtil.hash(JSON.stringify(blockData));
     }
 
     getDifficulty() {
-        // 14 is the maximum precision length supported by javascript
-        return parseInt(this.hash.substring(0, 14), 16);
+        // 计算前导零的数量
+        const zeros = this.hash.match(/^0*/)[0].length;
+        return zeros;
     }
 
     static get genesis() {
-        // The genesis block is fixed
         return Block.fromJson(Config.genesisBlock);
     }
 
@@ -53,6 +66,11 @@ class Block {
                 block[key] = value;
             }
         }, data);
+
+        // 确保设置了难度值
+        if (block.difficulty === undefined) {
+            block.difficulty = 0;
+        }
 
         block.hash = block.toHash();
         return block;

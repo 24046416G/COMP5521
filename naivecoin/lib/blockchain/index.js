@@ -139,6 +139,12 @@ class Blockchain {
     }
 
     addBlock(newBlock, emit = true) {
+        // 验证难度值是否正确设置
+        const expectedDifficulty = this.getDifficulty(newBlock.index);
+        if (newBlock.difficulty !== expectedDifficulty) {
+            console.error(`Block ${newBlock.index} has incorrect difficulty: ${newBlock.difficulty}, expected: ${expectedDifficulty}`);
+        }
+        
         // It only adds the block if it's valid (we need to compare to the previous one)
         if (this.checkBlock(newBlock, this.getLastBlock())) {
             this.blocks.push(newBlock);
@@ -182,23 +188,36 @@ class Blockchain {
     checkBlock(newBlock, previousBlock, referenceBlockchain = this.blocks) {
         const blockHash = newBlock.toHash();
 
-        if (previousBlock.index + 1 !== newBlock.index) { // Check if the block is the last one
+        // 基本验证
+        if (previousBlock.index + 1 !== newBlock.index) {
             console.error(`Invalid index: expected '${previousBlock.index + 1}' got '${newBlock.index}'`);
             throw new BlockAssertionError(`Invalid index: expected '${previousBlock.index + 1}' got '${newBlock.index}'`);
-        } else if (previousBlock.hash !== newBlock.previousHash) { // Check if the previous block is correct
+        } else if (previousBlock.hash !== newBlock.previousHash) {
             console.error(`Invalid previoushash: expected '${previousBlock.hash}' got '${newBlock.previousHash}'`);
             throw new BlockAssertionError(`Invalid previoushash: expected '${previousBlock.hash}' got '${newBlock.previousHash}'`);
-        } else if (blockHash !== newBlock.hash) { // Check if the hash is correct
+        } else if (blockHash !== newBlock.hash) {
             console.error(`Invalid hash: expected '${blockHash}' got '${newBlock.hash}'`);
             throw new BlockAssertionError(`Invalid hash: expected '${blockHash}' got '${newBlock.hash}'`);
-        } else if (newBlock.getDifficulty() >= this.getDifficulty(newBlock.index)) { // If the difficulty level of the proof-of-work challenge is correct
-            console.error(`Invalid proof-of-work difficulty: expected '${newBlock.getDifficulty()}' to be smaller than '${this.getDifficulty(newBlock.index)}'`);
-            throw new BlockAssertionError(`Invalid proof-of-work difficulty: expected '${newBlock.getDifficulty()}' be smaller than '${this.getDifficulty()}'`);
         }
 
-        // INFO: Here it would need to check if the block follows some expectation regarging the minimal number of transactions, value or data size to avoid empty blocks being mined.
+        // 验证难度
+        const expectedDifficulty = this.getDifficulty(newBlock.index);
+        if (newBlock.difficulty !== expectedDifficulty) {
+            console.error(`Invalid difficulty: expected '${expectedDifficulty}' got '${newBlock.difficulty}'`);
+            throw new BlockAssertionError(`Invalid difficulty: expected '${expectedDifficulty}' got '${newBlock.difficulty}'`);
+        }
 
-        // For each transaction in this block, check if it is valid
+        // 简化的工作量证明验证
+        const hash = newBlock.hash;
+        const difficulty = expectedDifficulty;
+        const prefix = '0'.repeat(difficulty);
+        
+        if (!hash.startsWith(prefix)) {
+            console.error(`Block hash does not meet difficulty requirements. Expected ${difficulty} leading zeros`);
+            throw new BlockAssertionError('Block hash does not meet difficulty requirements');
+        }
+
+        // 验证交易
         R.forEach(this.checkTransaction.bind(this), newBlock.transactions, referenceBlockchain);
 
         // 计算区块中所有交易的输入和输出总和
