@@ -209,7 +209,7 @@ const handleStudentLogin = async () => {
       localStorage.setItem('publicKey', loginResponse.data.addresses[0])
       localStorage.setItem('password', studentForm.password)
       
-      // 保存到 auth store
+      // ��存到 auth store
       await authStore.setUser({
         studentId: loginResponse.data.studentId,
         walletId: loginResponse.data.id,
@@ -234,19 +234,32 @@ const handleStudentLogin = async () => {
 const handleTeacherLogin = async () => {
   try {
     errorMessage.value = ''
-    const { data } = await authService.teacherLogin(teacherForm)
     
-    if (data.success) {
+    // 调用前端验证服务
+    const response = await authService.teacherLogin({
+      email: teacherForm.email,
+      password: teacherForm.password
+    });
+
+    if (response.data) {
+      // 保存教师信息到 localStorage
+      localStorage.setItem('teacherId', response.data.id)
+      localStorage.setItem('teacherEmail', response.data.email)
+      localStorage.setItem('role', 'teacher')
+      
+      // 保存到 auth store
       await authStore.setUser({
-        ...data.data,
+        id: response.data.id,
+        email: response.data.email,
         role: 'teacher'
       })
-      router.push('/teacher/dashboard')
-    } else {
-      errorMessage.value = data.message || 'Login failed'
+      
+      // 导航到教师仪表板
+      await router.push('/teacher/dashboard')
     }
   } catch (error) {
-    errorMessage.value = error.response?.data?.message || 'Email or password incorrect'
+    console.error('Teacher login error:', error)
+    errorMessage.value = 'Invalid email or password'
   }
 }
 </script> 

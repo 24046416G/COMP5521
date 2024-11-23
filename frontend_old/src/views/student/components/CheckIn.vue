@@ -237,41 +237,27 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, nextTick } from 'vue'
-import { useRoute } from 'vue-router'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { studentService } from '../../../services/api'
 
-const route = useRoute()
-const studentId = route.params.studentId
-const classId = localStorage.getItem('classId')
+// 从 localStorage 获取必要信息
+const studentId = localStorage.getItem('studentId')
+const walletId = localStorage.getItem('walletId')
+const password = localStorage.getItem('password')
 
+// 状态变量
+const classId = ref('')
 const manualCheckIn = ref({
   courseId: ''
 })
-
 const loading = ref(false)
 const errorMessage = ref('')
 const successMessage = ref('')
 const attendanceRecords = ref([])
+const openStates = ref({})
+const searchQuery = ref('')
 
-const formattedDate = computed(() => {
-  const date = new Date()
-  return date.toISOString().split('T')[0]
-})
-
-const formatDateTime = (timestamp) => {
-  if (!timestamp) return 'N/A'
-  const date = new Date(Number(timestamp))
-  return date.toLocaleString('en-GB', {
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-    hour12: false
-  })
-}
-
+// 显示成功消息
 const showSuccessMessage = (message) => {
   successMessage.value = message
   setTimeout(() => {
@@ -279,192 +265,207 @@ const showSuccessMessage = (message) => {
   }, 3000)
 }
 
+// 格式化时间
+const formatDateTime = (timestamp) => {
+  if (!timestamp) return 'N/A'
+  return new Date(Number(timestamp)).toLocaleString()
+}
+
+// 获取 classId
+const fetchClassId = async () => {
+  try {
+    if (!walletId) {
+      throw new Error('Wallet ID not found')
+    }
+    const response = await studentService.getWallet(walletId)
+    return response.data.classId
+  } catch (error) {
+    handleError(error, 'Error fetching class ID')
+    return null
+  }
+}
+
+// 计算过滤后的记录
+const groupedRecords = computed(() => {
+  if (searchQuery.value) {
+    return attendanceRecords.value.filter(record => 
+      record.courseId.toLowerCase().includes(searchQuery.value.toLowerCase())
+    )
+  }
+  return attendanceRecords.value
+})
+
+// 获取考勤记录
 const fetchAttendanceRecords = async () => {
   try {
-    loading.value = true;
-    errorMessage.value = '';
+    if (loading.value) return // 防止重复请求
     
-    const walletId = localStorage.getItem('walletId');
-    if (!walletId) {
-      throw new Error('未找到钱包ID');
-    }
+    loading.value = true
+    errorMessage.value = ''
     
     // 获取所有区块
-    const blocksResponse = await studentService.getBlocks();
-    const blocks = blocksResponse.data;
+    const blocksResponse = await studentService.getBlocks()
+    const blocks = blocksResponse.data
     
     // 获取待处理的交易
-    const pendingResponse = await studentService.getPendingTransactions();
-    const pendingTransactions = pendingResponse.data;
+    const pendingResponse = await studentService.getPendingTransactions()
+    const pendingTransactions = pendingResponse.data
     
     // 从区块中获取已确认的交易
     const confirmedRecords = blocks.flatMap(block => 
       block.transactions.filter(tx => 
-        tx.type === 'studentRegistration' &&
+        tx.type === 'attendance' &&
         tx.data?.outputs?.[0]?.metadata?.studentId === studentId
       ).map(tx => ({
         ...tx,
         status: 'complete',
         blockIndex: block.index,
-        timestamp: block.timestamp
+        timestamp: tx.data.outputs[0].metadata.timestamp
       }))
-    );
+    )
     
     // 获取待处理的交易
     const pendingRecords = pendingTransactions
       .filter(tx => 
-        tx.type === 'studentRegistration' &&
+        tx.type === 'attendance' &&
         tx.data?.outputs?.[0]?.metadata?.studentId === studentId
       )
       .map(tx => ({
         ...tx,
-        status: 'pending'
-      }));
+        status: 'pending',
+        timestamp: tx.data.outputs[0].metadata.timestamp
+      }))
     
     // 合并并按时间戳排序
-    attendanceRecords.value = [...confirmedRecords, ...pendingRecords]
-      .sort((a, b) => 
-        (b.data.outputs[0].metadata.registrationTime || b.timestamp) - 
-        (a.data.outputs[0].metadata.registrationTime || a.timestamp)
-      );
+    const allRecords = [...confirmedRecords, ...pendingRecords]
+      .sort((a, b) => b.timestamp - a.timestamp)
 
+    // 按课程分组
+    const groupedData = allRecords.reduce((acc, record) => {
+      const courseId = record.data.outputs[0].metadata.courseId
+      if (!acc[courseId]) {
+        acc[courseId] = {
+          courseId,
+          transactions: [],
+          status: record.status
+        }
+      }
+      acc[courseId].transactions.push(record)
+      if (record.status === 'complete') {
+        acc[courseId].status = 'complete'
+      }
+      return acc
+    }, {})
+
+    attendanceRecords.value = Object.values(groupedData)
   } catch (error) {
-    console.error('获取签到记录失败:', error);
-    errorMessage.value = error.message || '获取签到记录失败';
+    handleError(error, 'Failed to fetch attendance records')
+    attendanceRecords.value = []
   } finally {
-    loading.value = false;
+    loading.value = false
   }
 }
 
+// 处理手动签到
 const handleManualCheckIn = async () => {
   try {
     if (!manualCheckIn.value.courseId.trim()) {
-      errorMessage.value = '请输入课程ID';
-      return;
+      errorMessage.value = 'Please enter course ID'
+      return
     }
 
-    loading.value = true;
-    errorMessage.value = '';
-    
-    const walletId = localStorage.getItem('walletId');
-    const password = localStorage.getItem('password');
-    
     if (!walletId || !password) {
-      throw new Error('未找到钱包ID或密码');
+      throw new Error('Wallet ID or password not found')
     }
+
+    loading.value = true
+    errorMessage.value = ''
 
     const response = await studentService.checkIn(walletId, {
-      password: password,
+      password,
       courseId: manualCheckIn.value.courseId.trim(),
-      studentId: studentId,
-      classId: classId,
-      timestamp: Date.now() // 添加时间戳
-    });
-    
+      classId: classId.value
+    })
+
     if (response.status === 201) {
-      showSuccessMessage('签到成功！');
-      manualCheckIn.value.courseId = '';
-      await new Promise(resolve => setTimeout(resolve, 2000));
-      await fetchAttendanceRecords();
+      showSuccessMessage('Check-in successful!')
+      manualCheckIn.value.courseId = ''
+      await fetchAttendanceRecords() // 直接等待刷新完成
     }
   } catch (error) {
-    console.error('签到错误:', error);
     if (error.response?.data?.includes('Insufficient balance')) {
-      errorMessage.value = 'Insufficient balance, 1 token is required to sign in. Please mine to get tokens first.';
+      errorMessage.value = 'Insufficient balance, 1 token is required to sign in. Please mine to get tokens first.'
     } else {
-      errorMessage.value = error.response?.data || error.message || '签到失败';
+      handleError(error, 'Check-in failed')
     }
   } finally {
-    loading.value = false;
+    loading.value = false
   }
 }
 
+// 处理快速签到
 const handleQuickCheckIn = async (courseId) => {
   try {
-    if (loading.value) return;
-    loading.value = true;
-    errorMessage.value = '';
-    
-    const walletId = localStorage.getItem('walletId');
-    const password = localStorage.getItem('password');
-    
     if (!walletId || !password) {
-      throw new Error('未找到钱包ID或密码');
+      throw new Error('Wallet ID or password not found')
     }
+
+    loading.value = true
+    errorMessage.value = ''
 
     const response = await studentService.checkIn(walletId, {
-      password: password,
-      courseId: courseId,
-      studentId: studentId,
-      classId: classId
-    });
-    
-    if (response) {
-      showSuccessMessage('快速签到成功！');
-      setTimeout(async () => {
-        await fetchAttendanceRecords();
-      }, 2000);
+      password,
+      courseId,
+      classId: classId.value
+    })
+
+    if (response.status === 201) {
+      showSuccessMessage('Quick check-in successful!')
+      await fetchAttendanceRecords() // 直接等待刷新完成
     }
   } catch (error) {
-    console.error('快速签到错误:', error);
     if (error.response?.data?.includes('Insufficient balance')) {
-      errorMessage.value = '余额不足，签到需要1个代币。请先进行挖矿获取代币。';
+      errorMessage.value = 'Insufficient balance, 1 token is required to sign in. Please mine to get tokens first.'
     } else {
-      errorMessage.value = error.response?.data || error.message || '快速签到失败';
+      handleError(error, 'Quick check-in failed')
     }
   } finally {
-    loading.value = false;
+    loading.value = false
   }
 }
 
-const openStates = ref({})
-
-const searchQuery = ref('')
-
-const groupedRecords = computed(() => {
-  const groups = attendanceRecords.value.reduce((acc, record) => {
-    const metadata = record.data.outputs[0].metadata;
-    const courseId = metadata.courseId || metadata.classId; // 兼容两种ID
-    const timestamp = metadata.registrationTime || record.timestamp;
-
-    if (!acc[courseId]) {
-      acc[courseId] = {
-        courseId,
-        status: record.status,
-        latestTimestamp: timestamp,
-        transactions: [record]
-      };
-    } else {
-      acc[courseId].transactions.push(record);
-      if (timestamp > acc[courseId].latestTimestamp) {
-        acc[courseId].latestTimestamp = timestamp;
-      }
-      if (record.status === 'complete') {
-        acc[courseId].status = 'complete';
-      }
-    }
-    return acc;
-  }, {});
-
-  let records = Object.values(groups).sort((a, b) => b.latestTimestamp - a.latestTimestamp);
-  
-  if (searchQuery.value) {
-    records = records.filter(record => 
-      record.courseId.toLowerCase().includes(searchQuery.value.toLowerCase())
-    );
-  }
-
-  return records;
-});
-
+// 切换详情显示
 const toggleDetails = (record) => {
-  const courseId = record.courseId
-  openStates.value[courseId] = !openStates.value[courseId]
+  openStates.value[record.courseId] = !openStates.value[record.courseId]
 }
 
-onMounted(() => {
-  fetchAttendanceRecords()
+// 初始化
+onMounted(async () => {
+  try {
+    // 获取 classId
+    classId.value = await fetchClassId()
+    // 获取考勤记录
+    await fetchAttendanceRecords()
+    // 设置定时刷新
+    const refreshInterval = setInterval(fetchAttendanceRecords, 10000)
+    
+    // 组件卸载时清除定时器
+    onUnmounted(() => {
+      if (refreshInterval) {
+        clearInterval(refreshInterval)
+      }
+    })
+  } catch (error) {
+    console.error('Error in component initialization:', error)
+    errorMessage.value = 'Failed to initialize component'
+  }
 })
+
+// 错误处理函数
+const handleError = (error, message) => {
+  console.error(message, error)
+  errorMessage.value = error.response?.data || error.message || message
+}
 </script>
 
 <style scoped>

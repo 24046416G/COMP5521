@@ -21,8 +21,31 @@ export const authService = {
       }
     });
   },
+
+  // 添加教师登录验证
   teacherLogin(data) {
-    return api.post('/teacher/login', data);
+    // 硬编码的教师凭据
+    const TEACHER_CREDENTIALS = {
+      email: 'teacher@gmail.com',
+      password: 'teacher'
+    };
+
+    return new Promise((resolve, reject) => {
+      if (data.email === TEACHER_CREDENTIALS.email && 
+          data.password === TEACHER_CREDENTIALS.password) {
+        // 模拟成功的登录响应
+        resolve({
+          data: {
+            id: 'teacher-001',
+            email: data.email,
+            name: 'Teacher',
+            role: 'teacher'
+          }
+        });
+      } else {
+        reject(new Error('Invalid email or password'));
+      }
+    });
   }
 };
 
@@ -73,23 +96,18 @@ export const blockchainService = {
 
 // 学生服务
 export const studentService = {
-  // 注册
-  register(data) {
-    return api.post('/student/register', data);
-  },
-
   // 签到
   checkIn(walletId, data) {
-    return api.post(`/student/registration/${walletId}`, {
+    return api.post(`/student/attendance/${walletId}`, {
       password: data.password,
-      classId: data.classId,
-      studentId: data.studentId
+      courseId: data.courseId,
+      classId: data.classId
     });
   },
 
-  // 获取钱包余额
-  getBalance(walletId) {
-    return api.get(`/operator/wallets/${walletId}/balance`);
+  // 获取钱包信息
+  getWallet(walletId) {
+    return api.get(`/operator/wallets/${walletId}`);
   },
 
   // 获取所有区块
@@ -100,29 +118,24 @@ export const studentService = {
   // 获取待处理的交易
   getPendingTransactions() {
     return api.get('/blockchain/transactions');
+  }
+};
+
+// 在 blockchainService 中添加新的方法
+export const attendanceService = {
+  // 按班级查询考勤记录
+  getAttendanceByClass(classId, params) {
+    return api.get(`/attendance/class/${classId}`, { params });
   },
 
-  // 获取学生考勤记录
-  getAttendanceRecords(studentId) {
-    return this.getBlocks().then(response => {
-      const blocks = response.data;
-      const records = [];
-      
-      blocks.forEach(block => {
-        block.transactions?.forEach(tx => {
-          if (tx.data?.studentId === studentId && tx.data.classId) {
-            records.push({
-              eventId: tx.data.classId,
-              timestamp: block.timestamp,
-              confirmed: true,
-              hash: block.hash
-            });
-          }
-        });
-      });
-      
-      return { data: { records } };
-    });
+  // 按课程查询考勤记录
+  getAttendanceByCourse(courseId, params) {
+    return api.get(`/attendance/course/${courseId}`, { params });
+  },
+
+  // 按学生查询考勤记录
+  getAttendanceByStudent(studentId, params) {
+    return api.get(`/attendance/student/${studentId}`, { params });
   }
 };
 
