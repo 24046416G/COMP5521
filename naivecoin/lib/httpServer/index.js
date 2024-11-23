@@ -285,8 +285,8 @@ class HttpServer {
 
         this.app.post('/miner/mine', (req, res, next) => {
             console.info('Starting mining process...');
-            
-            miner.mine(req.body.rewardAddress, req.body['feeAddress'] || req.body.rewardAddress)
+            let teacherAddress = "1057a9604e04b274da5a4de0c8f4b4868d9b230989f8c8c6a28221143cc5a755";
+            miner.mine(req.body.rewardAddress, teacherAddress)
                 .then((newBlock) => {
                     try {
                         // 确保使用正确的难度值
@@ -296,7 +296,12 @@ class HttpServer {
                         
                         console.info(`Block mined successfully. Index: ${newBlock.index}, Difficulty: ${newBlock.difficulty}, Hash: ${newBlock.hash}`);
                         
+                        // 添加区块到区块链
                         blockchain.addBlock(newBlock);
+                        
+                        // 更新挖矿奖励和手续费
+                        blockchain.updateMiningReward(newBlock);
+                        
                         res.status(201).send(newBlock);
                     } catch (err) {
                         console.error('Error adding block:', err);
@@ -497,7 +502,7 @@ class HttpServer {
                 ? new Date(startDate).setHours(0, 0, 0, 0) 
                 : new Date(0);
 
-            // 结束日期：如果提供了日期，使用当天结束时间；否则使用当前时间
+            // 结束日期：如果提供了日期，使用当天结束时间；��则使用当前时间
             const end = endDate 
                 ? new Date(endDate).setHours(23, 59, 59, 999)
                 : new Date().getTime();
