@@ -312,19 +312,121 @@ class HttpServer {
                 });
         });
 
+        // 学生登录
+        this.app.post('/student/login', (req, res) => {
+            try {
+                const { password, studentId } = req.body;
+                
+                if (!password || !studentId) {
+                    return res.status(400).send({
+                        success: false,
+                        message: 'Password and studentId are required'
+                    });
+                }
+
+                // 读取钱包文件
+                const path = require('path');
+                const fs = require('fs');
+                const walletsPath = path.join(__dirname, '../../data/1/wallets.json');
+                
+                // 读取并解析 wallets.json
+                const walletsData = fs.readFileSync(walletsPath, 'utf8');
+                const wallets = JSON.parse(walletsData);
+                
+                // 计算密码的哈希值
+                const passwordHash = CryptoUtil.hash(password);
+                
+                // 查找匹配的钱包
+                const wallet = wallets.find(w => 
+                    w.studentId === studentId && 
+                    w.passwordHash === passwordHash
+                );
+
+                if (wallet) {
+                    // 登录成功，返回钱包信息（排除敏感信息）
+                    const safeWallet = {
+                        id: wallet.id,
+                        studentId: wallet.studentId,
+                        classId: wallet.classId,
+                        balance: wallet.balance,
+                        publicKey: wallet.keyPairs[0].publicKey  // 只返回公钥
+                    };
+                    
+                    res.status(200).send({
+                        success: true,
+                        message: 'Login successful',
+                        wallet: safeWallet
+                    });
+                } else {
+                    // 登录失败
+                    res.status(401).send({
+                        success: false,
+                        message: 'Invalid studentId or password'
+                    });
+                }
+            } catch (err) {
+                console.error('Login error:', err);
+                res.status(500).send({
+                    success: false,
+                    message: 'Internal server error during login'
+                });
+            }
+        });
+
         this.app.post('/student/register', (req, res) => {
             let { password, studentId, classId } = req.body;
+            
             try {
+                // 验证必要字段
+                if (!password || !studentId || !classId) {
+                    return res.status(400).send({
+                        success: false,
+                        message: 'Password, studentId and classId are required'
+                    });
+                }
+
+                // 读取钱包文件检查是否存在重复学号
+                const path = require('path');
+                const fs = require('fs');
+                const walletsPath = path.join(__dirname, '../../data/1/wallets.json');
+                
+                let wallets = [];
+                try {
+                    const walletsData = fs.readFileSync(walletsPath, 'utf8');
+                    wallets = JSON.parse(walletsData);
+                } catch (err) {
+                    // 如果文件不存在或为空，初始化为空数组
+                    wallets = [];
+                }
+
+                // 检查是否存在相同学号
+                const existingWallet = wallets.find(w => w.studentId === studentId);
+                if (existingWallet) {
+                    return res.status(409).send({
+                        success: false,
+                        message: `Student ID ${studentId} is already registered`
+                    });
+                }
+
+                // 创建新钱包
                 let wallet = this.operator.createStudentWallet(password, studentId, classId);
+                
                 res.status(201).send({ 
-                    walletId: wallet.id,
-                    studentId: wallet.studentId,
-                    classId: wallet.classId,
-                    publicKey: wallet.getPublicKey(),
-                    message: "Student wallet created successfully"
+                    success: true,
+                    message: "Student wallet created successfully",
+                    wallet: {
+                        walletId: wallet.id,
+                        studentId: wallet.studentId,
+                        classId: wallet.classId,
+                        publicKey: wallet.getPublicKey()
+                    }
                 });
             } catch (err) {
-                res.status(400).send(err.message);
+                console.error('Registration error:', err);
+                res.status(400).send({
+                    success: false,
+                    message: err.message
+                });
             }
         });
 
