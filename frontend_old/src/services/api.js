@@ -10,41 +10,28 @@ const api = axios.create({
 
 // Auth services
 export const authService = {
+  // 修改学生登录方法
   studentLogin(data) {
-    // 先获取钱包信息验证是否已注册
-    return api.get(`/operator/wallets/${data.walletId}`).then(response => {
-      // 验证密码和学生ID是否匹配
-      if (response.data.studentId === data.studentId) {
-        return response;
-      } else {
-        throw new Error('Invalid credentials');
-      }
+    return api.post('/student/login', {
+      password: data.password,
+      studentId: data.studentId
     });
   },
 
-  // 添加教师登录验证
+  // 教师登录方法保持不变
   teacherLogin(data) {
-    // 硬编码的教师凭据
-    const TEACHER_CREDENTIALS = {
-      email: 'teacher@gmail.com',
-      password: 'teacher'
-    };
-
     return new Promise((resolve, reject) => {
-      if (data.email === TEACHER_CREDENTIALS.email && 
-          data.password === TEACHER_CREDENTIALS.password) {
-        // 模拟成功的登录响应
-        resolve({
-          data: {
-            id: 'teacher-001',
-            email: data.email,
-            name: 'Teacher',
-            role: 'teacher'
-          }
-        });
-      } else {
-        reject(new Error('Invalid email or password'));
-      }
+      // 调用后端教师登录接口
+      api.post('/teacher/login', {
+        email: data.email,
+        password: data.password
+      })
+      .then(response => {
+        resolve(response);
+      })
+      .catch(error => {
+        reject(error);
+      });
     });
   }
 };

@@ -180,62 +180,47 @@ const showPassword = ref(false)
 
 const handleStudentLogin = async () => {
   try {
-    errorMessage.value = ''
-    console.log('Sending login request:', studentForm)
+    errorMessage.value = '';
     
-    // 先尝试获取钱包信息
-    const walletResponse = await blockchainService.getWallet(studentForm.walletId)
-    
-    if (!walletResponse.data) {
-      throw new Error('Student not registered')
-    }
-    
-    // 验证密码和学生ID
-    if (walletResponse.data.studentId !== studentForm.studentId) {
-      throw new Error('Invalid student ID')
-    }
-    
-    // 验证密码
-    const loginResponse = await authService.studentLogin({
-      walletId: studentForm.walletId,
-      password: studentForm.password,
-      studentId: studentForm.studentId
-    })
-    
-    if (loginResponse.data) {
+    // 调用修改后的登录接口
+    const response = await authService.studentLogin({
+      studentId: studentForm.studentId,
+      password: studentForm.password
+    });
+
+    if (response.data.success) {
+      const wallet = response.data.wallet;
+      
       // 保存用户信息到 localStorage
-      localStorage.setItem('walletId', loginResponse.data.id)
-      localStorage.setItem('studentId', loginResponse.data.studentId)
-      localStorage.setItem('publicKey', loginResponse.data.addresses[0])
-      localStorage.setItem('password', studentForm.password)
+      localStorage.setItem('studentId', wallet.studentId);
+      localStorage.setItem('walletId', wallet.id);
+      localStorage.setItem('publicKey', wallet.publicKey);
+      localStorage.setItem('classId', wallet.classId);
       
-      // ��存到 auth store
+      // 保存到 auth store
       await authStore.setUser({
-        studentId: loginResponse.data.studentId,
-        walletId: loginResponse.data.id,
-        publicKey: loginResponse.data.addresses[0],
+        studentId: wallet.studentId,
+        walletId: wallet.id,
+        publicKey: wallet.publicKey,
         role: 'student'
-      })
+      });
       
-      console.log('Navigating to dashboard with studentId:', loginResponse.data.studentId)
-      
-      // 使用完整的路径进行导航
+      // 导航到学生仪表板
       await router.push({
         name: 'studentCheckIn',
-        params: { studentId: loginResponse.data.studentId }
-      })
+        params: { studentId: wallet.studentId }
+      });
     }
   } catch (error) {
-    console.error('Login error:', error)
-    errorMessage.value = error.message || 'Invalid credentials'
+    console.error('Login error:', error);
+    errorMessage.value = error.response?.data?.message || 'Invalid credentials';
   }
 }
 
 const handleTeacherLogin = async () => {
   try {
-    errorMessage.value = ''
+    errorMessage.value = '';
     
-    // 调用前端验证服务
     const response = await authService.teacherLogin({
       email: teacherForm.email,
       password: teacherForm.password
@@ -243,23 +228,23 @@ const handleTeacherLogin = async () => {
 
     if (response.data) {
       // 保存教师信息到 localStorage
-      localStorage.setItem('teacherId', response.data.id)
-      localStorage.setItem('teacherEmail', response.data.email)
-      localStorage.setItem('role', 'teacher')
+      localStorage.setItem('teacherId', response.data.id);
+      localStorage.setItem('teacherEmail', response.data.email);
+      localStorage.setItem('role', 'teacher');
       
       // 保存到 auth store
       await authStore.setUser({
         id: response.data.id,
         email: response.data.email,
         role: 'teacher'
-      })
+      });
       
       // 导航到教师仪表板
-      await router.push('/teacher/dashboard')
+      await router.push('/teacher/dashboard');
     }
   } catch (error) {
-    console.error('Teacher login error:', error)
-    errorMessage.value = 'Invalid email or password'
+    console.error('Teacher login error:', error);
+    errorMessage.value = 'Invalid email or password';
   }
 }
 </script> 
