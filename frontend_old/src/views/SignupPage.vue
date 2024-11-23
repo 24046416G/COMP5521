@@ -175,36 +175,68 @@ const handleSignup = async () => {
   try {
     errorMessage.value = ''
     
-    const response = await blockchainService.register({
+    // 第一步：创建钱包
+    const walletResponse = await blockchainService.createWallet({
       password: form.password,
-      studentId: form.studentId
+      studentId: form.studentId,
+      classId: form.classId
     })
     
-    if (response.status === 201) {
-      console.log('Registration successful:', response.data)  // 添加日志
+    if (walletResponse.status === 201) {
+      const walletData = walletResponse.data
+      console.log('Wallet created:', walletData) // 添加日志
       
-      // 保存用户信息到 localStorage
-      localStorage.setItem('walletId', response.data.walletId)
-      localStorage.setItem('studentId', response.data.studentId)
-      localStorage.setItem('publicKey', response.data.publicKey)
-      localStorage.setItem('password', form.password) // 保存密码
-      
-      // 保存到 auth store
-      await authStore.setUser({
-        studentId: response.data.studentId,
-        walletId: response.data.walletId,
-        publicKey: response.data.publicKey,
-        role: 'student'
+      // 第二步：完成注册（创建注册交易）
+      const registrationResponse = await blockchainService.completeRegistration({
+        walletId: walletData.walletId,
+        password: form.password,
+        classId: form.classId,
+        studentId: form.studentId
       })
       
-      // 显示密钥对模态框
-      keys.publicKey = response.data.publicKey
-      keys.walletId = response.data.walletId
-      showModal.value = true
+      if (registrationResponse.status === 201) {
+        console.log('Registration transaction created:', registrationResponse.data)
+        
+        // 等待交易被确认
+        await new Promise(resolve => setTimeout(resolve, 1000))
+        
+        // 验证交易是否被记录
+        const transactions = await blockchainService.getPendingTransactions()
+        console.log('Current pending transactions:', transactions.data) // 添加日志
+        
+        const registrationTx = transactions.data.find(tx => 
+          tx.type === 'studentRegistration' && 
+          tx.data.outputs[0].metadata?.studentId === form.studentId
+        )
+        
+        if (!registrationTx) {
+          console.error('Transaction not found in pending transactions')
+          throw new Error('Registration transaction failed')
+        }
+        
+        // 保存用户信息到 localStorage
+        localStorage.setItem('walletId', walletData.walletId)
+        localStorage.setItem('studentId', walletData.studentId)
+        localStorage.setItem('publicKey', walletData.publicKey)
+        localStorage.setItem('password', form.password)
+        
+        // 保存到 auth store
+        await authStore.setUser({
+          studentId: walletData.studentId,
+          walletId: walletData.walletId,
+          publicKey: walletData.publicKey,
+          role: 'student'
+        })
+        
+        // 显示密钥对模态框
+        keys.publicKey = walletData.publicKey
+        keys.walletId = walletData.walletId
+        showModal.value = true
+      }
     }
   } catch (error) {
     console.error('Registration error:', error)
-    errorMessage.value = error.response?.data || 'Registration failed'
+    errorMessage.value = error.response?.data || error.message || 'Registration failed'
   }
 }
 

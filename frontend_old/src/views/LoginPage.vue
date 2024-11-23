@@ -158,6 +158,7 @@ import { ref, reactive } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
 import { authService } from '../services/api'
+import { blockchainService } from '../services/api'
 
 const router = useRouter()
 const authStore = useAuthStore()
@@ -182,36 +183,51 @@ const handleStudentLogin = async () => {
     errorMessage.value = ''
     console.log('Sending login request:', studentForm)
     
-    const response = await authService.studentLogin(studentForm)
-    console.log('Login response:', response.data)
+    // 先尝试获取钱包信息
+    const walletResponse = await blockchainService.getWallet(studentForm.walletId)
     
-    if (response.status === 201) {
+    if (!walletResponse.data) {
+      throw new Error('Student not registered')
+    }
+    
+    // 验证密码和学生ID
+    if (walletResponse.data.studentId !== studentForm.studentId) {
+      throw new Error('Invalid student ID')
+    }
+    
+    // 验证密码
+    const loginResponse = await authService.studentLogin({
+      walletId: studentForm.walletId,
+      password: studentForm.password,
+      studentId: studentForm.studentId
+    })
+    
+    if (loginResponse.data) {
       // 保存用户信息到 localStorage
-      localStorage.setItem('walletId', response.data.walletId)
-      localStorage.setItem('studentId', response.data.studentId)
-      localStorage.setItem('publicKey', response.data.publicKey)
+      localStorage.setItem('walletId', loginResponse.data.id)
+      localStorage.setItem('studentId', loginResponse.data.studentId)
+      localStorage.setItem('publicKey', loginResponse.data.addresses[0])
       localStorage.setItem('password', studentForm.password)
       
       // 保存到 auth store
       await authStore.setUser({
-        studentId: response.data.studentId,
-        walletId: response.data.walletId,
-        publicKey: response.data.publicKey,
+        studentId: loginResponse.data.studentId,
+        walletId: loginResponse.data.id,
+        publicKey: loginResponse.data.addresses[0],
         role: 'student'
       })
       
-      console.log('Navigating to dashboard with studentId:', response.data.studentId)
+      console.log('Navigating to dashboard with studentId:', loginResponse.data.studentId)
       
       // 使用完整的路径进行导航
       await router.push({
         name: 'studentCheckIn',
-        params: { studentId: response.data.studentId }
+        params: { studentId: loginResponse.data.studentId }
       })
     }
   } catch (error) {
     console.error('Login error:', error)
-    console.error('Error response:', error.response?.data)
-    errorMessage.value = error.response?.data?.message || 'Student ID or password incorrect'
+    errorMessage.value = error.message || 'Invalid credentials'
   }
 }
 

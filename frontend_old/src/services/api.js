@@ -11,7 +11,15 @@ const api = axios.create({
 // Auth services
 export const authService = {
   studentLogin(data) {
-    return api.post('/student/register', data);
+    // 先获取钱包信息验证是否已注册
+    return api.get(`/operator/wallets/${data.walletId}`).then(response => {
+      // 验证密码和学生ID是否匹配
+      if (response.data.studentId === data.studentId) {
+        return response;
+      } else {
+        throw new Error('Invalid credentials');
+      }
+    });
   },
   teacherLogin(data) {
     return api.post('/teacher/login', data);
@@ -20,6 +28,29 @@ export const authService = {
 
 // Blockchain services
 export const blockchainService = {
+  // 创建钱包
+  createWallet(data) {
+    return api.post('/student/register', {
+      password: data.password,
+      studentId: data.studentId,
+      classId: data.classId
+    });
+  },
+  
+  // 完成学生注册
+  completeRegistration(data) {
+    return api.post(`/student/registration/${data.walletId}`, {
+      password: data.password,
+      classId: data.classId,
+      studentId: data.studentId
+    });
+  },
+  
+  // 获取钱包信息
+  getWallet(walletId) {
+    return api.get(`/operator/wallets/${walletId}`);
+  },
+  
   register(data) {
     return api.post('/student/register', data);
   },
@@ -32,12 +63,8 @@ export const blockchainService = {
   getStudentAttendance(studentId) {
     return api.get(`/blockchain/attendance/student/${studentId}`);
   },
-  completeRegistration(data) {
-    return api.post(`/student/registration/${data.walletId}`, {
-      password: data.password,
-      classId: data.classId,
-      studentId: data.studentId
-    });
+  getPendingTransactions() {
+    return api.get('/blockchain/transactions');
   }
 };
 
