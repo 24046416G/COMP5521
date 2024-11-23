@@ -67,6 +67,11 @@ export const studentService = {
     return api.get('/blockchain/blocks');
   },
 
+  // 获取待处理的交易
+  getPendingTransactions() {
+    return api.get('/blockchain/transactions');
+  },
+
   // 获取学生考勤记录
   getAttendanceRecords(studentId) {
     return this.getBlocks().then(response => {

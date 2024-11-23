@@ -40,6 +40,18 @@
 
             <div>
               <label class="block text-sm font-medium text-gray-700">
+                Class ID
+              </label>
+              <input 
+                type="text" 
+                :value="classId"
+                readonly
+                class="mt-1 block w-full px-3 py-2 bg-gray-100 border border-gray-300 rounded-md shadow-sm text-gray-600 sm:text-sm"
+              >
+            </div>
+
+            <div>
+              <label class="block text-sm font-medium text-gray-700">
                 Course ID
               </label>
               <input 
@@ -78,27 +90,31 @@
             </div>
             <div v-else class="space-y-2">
               <div 
-                v-for="course in uniqueCoursesWithDates" 
-                :key="course.eventId"
+                v-for="record in previousCourses" 
+                :key="record.id"
                 class="p-4 bg-gray-50 rounded-md"
               >
                 <div class="flex items-center justify-between">
-                  <div class="space-y-1">
-                    <div class="flex items-center space-x-2">
-                      <span class="text-sm font-medium text-gray-900">Course: {{ course.eventId }}</span>
+                  <div class="space-y-2">
+                    <div class="flex items-center space-x-4">
+                      <span class="text-sm font-medium text-gray-900">Student ID: {{ record.studentId }}</span>
+                      <span class="text-sm font-medium text-gray-900">Class ID: {{ record.classId }}</span>
+                    </div>
+                    <div class="flex items-center space-x-4">
+                      <span class="text-sm font-medium text-gray-900">Transaction ID: {{ record.id.substring(0, 8) }}...</span>
                       <span 
                         :class="[
                           'px-2 py-1 text-xs font-medium rounded-full',
-                          course.confirmed 
+                          record.status === 'complete' 
                             ? 'bg-green-100 text-green-800' 
                             : 'bg-yellow-100 text-yellow-800'
                         ]"
                       >
-                        {{ course.confirmed ? 'Confirmed' : 'Pending' }}
+                        {{ record.status }}
                       </span>
                     </div>
                     <div class="text-xs text-gray-500">
-                      Last Check-in: {{ formatDate(course.latestDate) }}
+                      Check-in Time: {{ formatDateTime(record.timestamp) }}
                     </div>
                   </div>
                 </div>
@@ -124,6 +140,7 @@ import { studentService } from '../../../services/api'
 
 const route = useRoute()
 const studentId = route.params.studentId
+const classId = localStorage.getItem('classId')
 
 const manualCheckIn = ref({
   courseId: ''
@@ -139,9 +156,16 @@ const formattedDate = computed(() => {
   return date.toISOString().split('T')[0]
 })
 
-const formatDate = (timestamp) => {
+const formatDateTime = (timestamp) => {
   if (!timestamp) return 'N/A'
-  return new Date(timestamp).toISOString().split('T')[0]
+  const date = new Date(Number(timestamp))
+  return date.toLocaleString('zh-CN', {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit'
+  })
 }
 
 const uniqueCoursesWithDates = computed(() => {
@@ -172,23 +196,52 @@ const fetchAttendanceRecords = async () => {
   try {
     loading.value = true
     errorMessage.value = ''
-    const response = await studentService.getBlocks()
-    const blocks = response.data
     const records = []
-    
-    blocks.forEach(block => {
-      block.transactions?.forEach(tx => {
-        if (tx.data && tx.data.studentId === studentId && tx.data.classId) {
+
+    // 获取已确认的交易
+    const confirmedResponse = await studentService.getPendingTransactions()
+    const confirmedTransactions = confirmedResponse.data
+
+    // 处理已确认的交易
+    confirmedTransactions.forEach(tx => {
+      if (tx.type === 'studentRegistration' && 
+          tx.data?.outputs?.[0]?.metadata?.studentId === studentId) {
+        records.push({
+          id: tx.id,
+          studentId: tx.data.outputs[0].metadata.studentId,
+          classId: tx.data.outputs[0].metadata.classId,
+          timestamp: tx.data.outputs[0].metadata.registrationTime,
+          status: 'complete',
+          hash: tx.hash
+        })
+      }
+    })
+
+    // 获取待处理的交易（这里需要实现获取待处理交易的逻辑）
+    try {
+      const pendingResponse = await studentService.getPendingTransactions()
+      const pendingTransactions = pendingResponse.data
+
+      pendingTransactions.forEach(tx => {
+        if (tx.type === 'studentRegistration' && 
+            tx.data?.outputs?.[0]?.metadata?.studentId === studentId &&
+            !records.some(r => r.id === tx.id)) { // 避免重复
           records.push({
-            eventId: tx.data.classId,
-            timestamp: block.timestamp,
-            confirmed: true,
-            hash: block.hash
+            id: tx.id,
+            studentId: tx.data.outputs[0].metadata.studentId,
+            classId: tx.data.outputs[0].metadata.classId,
+            timestamp: Date.now(),
+            status: 'pending',
+            hash: tx.hash
           })
         }
       })
-    })
-    
+    } catch (pendingError) {
+      console.warn('Failed to fetch pending transactions:', pendingError)
+    }
+
+    // 按时间戳排序，最新的在前
+    records.sort((a, b) => b.timestamp - a.timestamp)
     previousCourses.value = records
     console.log('Attendance records:', records)
   } catch (error) {
