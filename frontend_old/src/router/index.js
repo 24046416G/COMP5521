@@ -6,7 +6,6 @@ import TeacherDashboard from '../views/teacher/DashboardPage.vue'
 import TeacherDashboardOverview from '../views/teacher/components/Dashboard.vue'
 import TeacherBlockchain from '../views/teacher/components/Blockchain.vue'
 import CheckIn from '../views/student/components/CheckIn.vue'
-import AttendanceRecords from '../views/student/components/AttendanceRecords.vue'
 import BlockMining from '../views/student/components/BlockMining.vue'
 import Account from '../views/student/components/Account.vue'
 import { useAuthStore } from '../stores/auth'
@@ -47,11 +46,6 @@ const router = createRouter({
           path: 'check-in',
           name: 'studentCheckIn',
           component: CheckIn
-        },
-        {
-          path: 'attendance-records',
-          name: 'studentAttendanceRecords',
-          component: AttendanceRecords
         },
         {
           path: 'block-mining',
