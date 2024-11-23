@@ -33,24 +33,24 @@ class Block {
         this.transactions = [];
         this.difficulty = 0;
         this.hash = '';
+        this.miningTime = 0;
     }
 
     toHash() {
-        // 简化哈希计算，不包含 difficulty
-        const blockData = {
-            index: this.index,
-            previousHash: this.previousHash,
-            timestamp: this.timestamp,
-            nonce: this.nonce,
-            transactions: this.transactions
-        };
-        return CryptoUtil.hash(JSON.stringify(blockData));
+        // 包含 difficulty 在哈希计算中
+        return CryptoUtil.hash(
+            this.index + 
+            this.previousHash + 
+            this.timestamp + 
+            JSON.stringify(this.transactions) + 
+            this.nonce +
+            this.difficulty
+        );
     }
 
     getDifficulty() {
-        // 计算前导零的数量
-        const zeros = this.hash.match(/^0*/)[0].length;
-        return zeros;
+        // 返回当前区块的难度值
+        return this.difficulty;
     }
 
     static get genesis() {
@@ -67,15 +67,9 @@ class Block {
             }
         }, data);
 
-        // 确保设置了难度值
-        if (block.difficulty === undefined) {
-            block.difficulty = 0;
-        }
-
         block.hash = block.toHash();
         return block;
     }
-
 }
 
 module.exports = Block;

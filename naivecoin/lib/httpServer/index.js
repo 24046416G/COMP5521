@@ -203,7 +203,7 @@ class HttpServer {
                 const wallet = wallets.find(w => w.id === req.params.walletId);
                 if (!wallet) throw new Error(`Wallet not found with id '${req.params.walletId}'`);
                 
-                // 返回钱��信息
+                // 返回钱信息
                 res.status(200).send({
                     id: wallet.id,
                     addresses: wallet.keyPairs,
@@ -284,20 +284,31 @@ class HttpServer {
         });
 
         this.app.post('/miner/mine', (req, res, next) => {
-            const teacherConfig = require('../../data/teacher.json');
-            miner.mine(req.body.rewardAddress, teacherConfig.address)
+            console.info('Starting mining process...');
+            
+            miner.mine(req.body.rewardAddress, req.body['feeAddress'] || req.body.rewardAddress)
                 .then((newBlock) => {
-                    newBlock = Block.fromJson(newBlock);
-                    newBlock.difficulty = blockchain.getDifficulty(newBlock.index);
-                    newBlock.hash = newBlock.toHash();
-                    
-                    blockchain.addBlock(newBlock);
-                    blockchain.updateMiningReward(newBlock);
-                    res.status(201).send(newBlock);
+                    try {
+                        // 确保使用正确的难度值
+                        const expectedDifficulty = blockchain.getDifficulty(newBlock.index);
+                        newBlock = Block.fromJson(newBlock);
+                        newBlock.difficulty = expectedDifficulty;
+                        
+                        console.info(`Block mined successfully. Index: ${newBlock.index}, Difficulty: ${newBlock.difficulty}, Hash: ${newBlock.hash}`);
+                        
+                        blockchain.addBlock(newBlock);
+                        res.status(201).send(newBlock);
+                    } catch (err) {
+                        console.error('Error adding block:', err);
+                        next(err);
+                    }
                 })
                 .catch((ex) => {
-                    if (ex instanceof BlockAssertionError && ex.message.includes('Invalid index')) next(new HTTPError(409, 'A new block were added before we were able to mine one'), null, ex);
-                    else next(ex);
+                    console.error('Mining failed:', ex);
+                    if (ex instanceof BlockAssertionError && ex.message.includes('Invalid index')) 
+                        next(new HTTPError(409, 'A new block were added before we were able to mine one'), null, ex);
+                    else 
+                        next(ex);
                 });
         });
 

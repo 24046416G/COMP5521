@@ -202,18 +202,23 @@ class Blockchain {
 
         // 验证难度
         const expectedDifficulty = this.getDifficulty(newBlock.index);
+        console.info(`Validating block ${newBlock.index}:`);
+        console.info(`- Current chain length: ${this.blocks.length}`);
+        console.info(`- Previous block difficulty: ${previousBlock.difficulty}`);
+        console.info(`- Expected difficulty: ${expectedDifficulty}`);
+        console.info(`- Block difficulty: ${newBlock.difficulty}`);
+
         if (newBlock.difficulty !== expectedDifficulty) {
-            console.error(`Invalid difficulty: expected '${expectedDifficulty}' got '${newBlock.difficulty}'`);
+            console.error(`Block ${newBlock.index}: Invalid difficulty:`);
+            console.error(`- Expected: ${expectedDifficulty}`);
+            console.error(`- Got: ${newBlock.difficulty}`);
             throw new BlockAssertionError(`Invalid difficulty: expected '${expectedDifficulty}' got '${newBlock.difficulty}'`);
         }
 
-        // 简化的工作量证明验证
-        const hash = newBlock.hash;
-        const difficulty = expectedDifficulty;
-        const prefix = '0'.repeat(difficulty);
-        
-        if (!hash.startsWith(prefix)) {
-            console.error(`Block hash does not meet difficulty requirements. Expected ${difficulty} leading zeros`);
+        // 验证工作量证明
+        const prefix = '0'.repeat(expectedDifficulty);
+        if (!newBlock.hash.startsWith(prefix)) {
+            console.error(`Block ${newBlock.index}: Hash ${newBlock.hash} does not meet difficulty requirement of ${expectedDifficulty} leading zeros`);
             throw new BlockAssertionError('Block hash does not meet difficulty requirements');
         }
 
@@ -384,7 +389,7 @@ class Blockchain {
             );
     }
 
-    // 获取课程的所有考勤记录
+    // 获取课程的有考勤记录
     getCourseAttendanceRecords(courseId) {
         return this.blocks
             .flatMap(block => block.transactions)

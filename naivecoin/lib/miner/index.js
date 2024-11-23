@@ -13,33 +13,48 @@ class Miner {
 
     mine(rewardAddress, feeAddress) {
         let baseBlock = Miner.generateNextBlock(rewardAddress, feeAddress, this.blockchain);
-        let difficulty = this.blockchain.getDifficulty(baseBlock.index);
-        
-        return new Promise((resolve, reject) => {
-            try {
-                // 设置区块难度
-                baseBlock.difficulty = difficulty;
-                console.log(`Mining block ${baseBlock.index} with difficulty ${difficulty}`);
-                
-                // 简化的挖矿过程
-                let nonce = 0;
-                const prefix = '0'.repeat(difficulty);
-                
-                while (true) {
-                    baseBlock.nonce = nonce;
-                    baseBlock.hash = baseBlock.toHash();
-                    
-                    if (baseBlock.hash.startsWith(prefix)) {
-                        console.info(`Block found: difficulty '${difficulty}' hash '${baseBlock.hash}' nonce '${nonce}'`);
-                        resolve(baseBlock);
-                        break;
-                    }
-                    nonce++;
-                }
-            } catch (ex) {
-                reject(ex);
-            }
+        process.execArgv = R.reject((item) => item.includes('debug'), process.execArgv);
+
+        /* istanbul ignore next */
+        const thread = spawn(function (input, done) {
+            /*eslint-disable */
+            require(input.__dirname + '/../util/consoleWrapper.js')('mine-worker', input.logLevel);
+            const Block = require(input.__dirname + '/../blockchain/block');
+            const Miner = require(input.__dirname);
+            /*eslint-enable */
+
+            done(Miner.proveWorkFor(Block.fromJson(input.jsonBlock), input.difficulty));
         });
+
+        const transactionList = R.pipe(
+            R.countBy(R.prop('type')),
+            R.toString,
+            R.replace('{', ''),
+            R.replace('}', ''),
+            R.replace(/"/g, '')
+        )(baseBlock.transactions);
+
+        console.info(`Mining a new block with ${baseBlock.transactions.length} (${transactionList}) transactions`);
+
+        // 获取当前难度值
+        const difficulty = this.blockchain.getDifficulty(baseBlock.index);
+        console.info(`Starting mining with difficulty: ${difficulty}`);
+
+        const promise = thread.promise().then((result) => {
+            thread.kill();
+            // 确保返回的区块使用正确的难度值
+            result.difficulty = difficulty;
+            return result;
+        });
+
+        thread.send({
+            __dirname: __dirname,
+            logLevel: this.logLevel,
+            jsonBlock: baseBlock,
+            difficulty: difficulty
+        });
+
+        return promise;
     }
 
     static generateNextBlock(rewardAddress, feeAddress, blockchain) {
@@ -47,6 +62,17 @@ class Miner {
         const nextIndex = previousBlock ? previousBlock.index + 1 : 0;
         const previousHash = previousBlock ? previousBlock.hash : '0';
         const timestamp = new Date().getTime() / 1000;
+        
+        // 计算新区块的难度值
+        const difficulty = blockchain.getDifficulty(nextIndex);
+        console.info(`Generating block ${nextIndex} with difficulty ${difficulty}`);
+
+        let block = new Block();
+        block.index = nextIndex;
+        block.previousHash = previousHash;
+        block.timestamp = timestamp;
+        block.difficulty = difficulty;  // 设置初始难度值
+
         const blocks = blockchain.getAllBlocks();
         const candidateTransactions = blockchain.transactions;
         const transactionsInBlocks = R.flatten(R.map(R.prop('transactions'), blocks));
@@ -127,7 +153,7 @@ class Miner {
             transactions.push(feeTransaction);
         }
 
-        // Add reward transaction
+        // Add reward transaction (always add reward transaction even if no other transactions)
         if (rewardAddress) {
             let rewardTransaction = Transaction.fromJson({
                 id: CryptoUtil.randomId(64),
@@ -146,31 +172,48 @@ class Miner {
             transactions.push(rewardTransaction);
         }
 
-        return Block.fromJson({
-            index: nextIndex,
-            previousHash: previousHash,
-            timestamp: timestamp,
-            transactions: transactions,
-            nonce: 0
-        });
+        // 设置区块的交易列表
+        block.transactions = transactions;
+
+        return block;
     }
 
-    /* istanbul ignore next */
     static proveWorkFor(jsonBlock, difficulty) {
-        let blockDifficulty = null;
-        let start = process.hrtime();
         let block = Block.fromJson(jsonBlock);
-
-        // INFO: Every cryptocurrency has a different way to prove work, this is a simple hash sequence
-
-        // Loop incrementing the nonce to find the hash at desired difficulty
+        
+        // 记录挖矿开始时间
+        const miningStartTime = new Date().getTime() / 1000;
+        console.info(`Mining block ${block.index} with difficulty ${difficulty}`);
+        
+        // 设置区块难度
+        block.difficulty = difficulty;
+        
+        // 挖矿过程
+        let nonce = 0;
+        const prefix = '0'.repeat(difficulty);
+        
         do {
-            block.timestamp = new Date().getTime() / 1000;
-            block.nonce++;
+            block.nonce = nonce;
             block.hash = block.toHash();
-            blockDifficulty = block.getDifficulty();
-        } while (blockDifficulty >= difficulty);
-        console.info(`Block found: time '${process.hrtime(start)[0]} sec' dif '${difficulty}' hash '${block.hash}' nonce '${block.nonce}'`);
+            nonce++;
+            
+            if (nonce % 100000 === 0) {
+                console.debug(`Mining attempt ${nonce}, current hash: ${block.hash}`);
+            }
+        } while (!block.hash.startsWith(prefix));
+
+        // 计算挖矿耗时
+        const miningEndTime = new Date().getTime() / 1000;
+        const miningTime = miningEndTime - miningStartTime;
+        
+        console.info(`Block found! Nonce: ${nonce}, Hash: ${block.hash}, Mining time: ${miningTime}s`);
+        
+        // 将挖矿时间保存到区块中
+        block.miningTime = miningTime;
+        
+        // 再次确认难度值设置正确
+        console.info(`Final block difficulty: ${block.difficulty}`);
+        
         return block;
     }
 }
