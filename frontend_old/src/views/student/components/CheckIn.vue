@@ -289,12 +289,45 @@ const fetchAttendanceRecords = async () => {
       throw new Error('未找到钱包ID');
     }
     
-    const response = await studentService.getAttendanceRecords(walletId);
-    if (Array.isArray(response)) {  // 添加数据验证
-      attendanceRecords.value = response;
-    } else {
-      throw new Error('获取签到记录失败：数据格式错误');
-    }
+    // 获取所有区块
+    const blocksResponse = await studentService.getBlocks();
+    const blocks = blocksResponse.data;
+    
+    // 获取待处理的交易
+    const pendingResponse = await studentService.getPendingTransactions();
+    const pendingTransactions = pendingResponse.data;
+    
+    // 从区块中获取已确认的交易
+    const confirmedRecords = blocks.flatMap(block => 
+      block.transactions.filter(tx => 
+        tx.type === 'studentRegistration' &&
+        tx.data?.outputs?.[0]?.metadata?.studentId === studentId
+      ).map(tx => ({
+        ...tx,
+        status: 'complete',
+        blockIndex: block.index,
+        timestamp: block.timestamp
+      }))
+    );
+    
+    // 获取待处理的交易
+    const pendingRecords = pendingTransactions
+      .filter(tx => 
+        tx.type === 'studentRegistration' &&
+        tx.data?.outputs?.[0]?.metadata?.studentId === studentId
+      )
+      .map(tx => ({
+        ...tx,
+        status: 'pending'
+      }));
+    
+    // 合并并按时间戳排序
+    attendanceRecords.value = [...confirmedRecords, ...pendingRecords]
+      .sort((a, b) => 
+        (b.data.outputs[0].metadata.registrationTime || b.timestamp) - 
+        (a.data.outputs[0].metadata.registrationTime || a.timestamp)
+      );
+
   } catch (error) {
     console.error('获取签到记录失败:', error);
     errorMessage.value = error.message || '获取签到记录失败';
@@ -324,15 +357,15 @@ const handleManualCheckIn = async () => {
       password: password,
       courseId: manualCheckIn.value.courseId.trim(),
       studentId: studentId,
-      classId: classId
+      classId: classId,
+      timestamp: Date.now() // 添加时间戳
     });
     
-    if (response) {
+    if (response.status === 201) {
       showSuccessMessage('签到成功！');
       manualCheckIn.value.courseId = '';
-      setTimeout(async () => {
-        await fetchAttendanceRecords();
-      }, 2000);
+      await new Promise(resolve => setTimeout(resolve, 2000));
+      await fetchAttendanceRecords();
     }
   } catch (error) {
     console.error('签到错误:', error);
@@ -390,18 +423,21 @@ const searchQuery = ref('')
 
 const groupedRecords = computed(() => {
   const groups = attendanceRecords.value.reduce((acc, record) => {
-    const courseId = record.data.outputs[0].metadata.classId;
+    const metadata = record.data.outputs[0].metadata;
+    const courseId = metadata.courseId || metadata.classId; // 兼容两种ID
+    const timestamp = metadata.registrationTime || record.timestamp;
+
     if (!acc[courseId]) {
       acc[courseId] = {
         courseId,
         status: record.status,
-        latestTimestamp: record.data.outputs[0].metadata.registrationTime,
+        latestTimestamp: timestamp,
         transactions: [record]
       };
     } else {
       acc[courseId].transactions.push(record);
-      if (record.data.outputs[0].metadata.registrationTime > acc[courseId].latestTimestamp) {
-        acc[courseId].latestTimestamp = record.data.outputs[0].metadata.registrationTime;
+      if (timestamp > acc[courseId].latestTimestamp) {
+        acc[courseId].latestTimestamp = timestamp;
       }
       if (record.status === 'complete') {
         acc[courseId].status = 'complete';

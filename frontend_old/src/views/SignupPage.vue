@@ -182,9 +182,9 @@ const handleSignup = async () => {
       classId: form.classId
     })
     
-    if (walletResponse.status === 201) {
-      const walletData = walletResponse.data
-      console.log('Wallet created:', walletData) // 添加日志
+    if (walletResponse.data.success) {
+      const walletData = walletResponse.data.wallet
+      console.log('Wallet created:', walletData)
       
       // 第二步：完成注册（创建注册交易）
       const registrationResponse = await blockchainService.completeRegistration({
@@ -200,19 +200,9 @@ const handleSignup = async () => {
         // 等待交易被确认
         await new Promise(resolve => setTimeout(resolve, 1000))
         
-        // 验证交易是否被记录
+        // 使用 blockchainService 来获取待处理交易
         const transactions = await blockchainService.getPendingTransactions()
-        console.log('Current pending transactions:', transactions.data) // 添加日志
-        
-        const registrationTx = transactions.data.find(tx => 
-          tx.type === 'studentRegistration' && 
-          tx.data.outputs[0].metadata?.studentId === form.studentId
-        )
-        
-        if (!registrationTx) {
-          console.error('Transaction not found in pending transactions')
-          throw new Error('Registration transaction failed')
-        }
+        console.log('Current pending transactions:', transactions.data)
         
         // 保存用户信息到 localStorage
         localStorage.setItem('walletId', walletData.walletId)
@@ -233,10 +223,12 @@ const handleSignup = async () => {
         keys.walletId = walletData.walletId
         showModal.value = true
       }
+    } else {
+      throw new Error(walletResponse.data.message || 'Failed to create wallet')
     }
   } catch (error) {
     console.error('Registration error:', error)
-    errorMessage.value = error.response?.data || error.message || 'Registration failed'
+    errorMessage.value = error.response?.data?.message || error.message || 'Registration failed'
   }
 }
 

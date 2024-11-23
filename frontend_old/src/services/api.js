@@ -53,17 +53,32 @@ export const blockchainService = {
   
   register(data) {
     return api.post('/student/register', data);
+  },
+  getBlocks() {
+    return api.get('/blockchain/blocks');
+  },
+  submitAttendance(data) {
+    return api.post('/blockchain/attendance', data);
+  },
+  getStudentAttendance(studentId) {
+    return api.get(`/blockchain/attendance/student/${studentId}`);
+  },
+  getPendingTransactions() {
+    return api.get('/blockchain/transactions');
+  },
+  mineBlock(data) {
+    return api.post('/miner/mine', data);
   }
 };
 
 // 学生服务
 export const studentService = {
-  // 创建wallet
+  // 注册
   register(data) {
     return api.post('/student/register', data);
   },
 
-  // 注册
+  // 签到
   checkIn(walletId, data) {
     return api.post(`/student/registration/${walletId}`, {
       password: data.password,
@@ -88,55 +103,26 @@ export const studentService = {
   },
 
   // 获取学生考勤记录
-  async getAttendanceRecords(walletId) {
-    try {
-      // 获取所有区块
-      const blocksResponse = await this.getBlocks();
-      const blocks = blocksResponse.data;
+  getAttendanceRecords(studentId) {
+    return this.getBlocks().then(response => {
+      const blocks = response.data;
+      const records = [];
       
-      // 获取待处理交易
-      const pendingResponse = await this.getPendingTransactions();
-      const pendingTransactions = pendingResponse.data;
+      blocks.forEach(block => {
+        block.transactions?.forEach(tx => {
+          if (tx.data?.studentId === studentId && tx.data.classId) {
+            records.push({
+              eventId: tx.data.classId,
+              timestamp: block.timestamp,
+              confirmed: true,
+              hash: block.hash
+            });
+          }
+        });
+      });
       
-      // 从区块中获取已确认的交易
-      const confirmedRecords = blocks.flatMap(block => 
-        block.transactions.filter(tx => 
-          tx.type === 'studentRegistration' &&
-          tx.data?.outputs?.[0]?.metadata?.studentId
-        ).map(tx => ({
-          ...tx,
-          status: 'complete'
-        }))
-      );
-      
-      // 获取待处理的交易
-      const pendingRecords = pendingTransactions
-        .filter(tx => 
-          tx.type === 'studentRegistration' &&
-          tx.data?.outputs?.[0]?.metadata?.studentId
-        )
-        .map(tx => ({
-          ...tx,
-          status: 'pending'
-        }));
-      
-      // 合并并按时间戳排序
-      const allRecords = [...confirmedRecords, ...pendingRecords]
-        .sort((a, b) => 
-          b.data.outputs[0].metadata.registrationTime - 
-          a.data.outputs[0].metadata.registrationTime
-        );
-      
-      return allRecords;
-    } catch (error) {
-      console.error('Error fetching attendance records:', error);
-      throw error;
-    }
-  },
-
-  // 添加考勤记录
-  submitAttendance(walletId, data) {
-    return api.post(`/student/attendance/${walletId}`, data);
+      return { data: { records } };
+    });
   }
 };
 
