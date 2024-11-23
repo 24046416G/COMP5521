@@ -75,28 +75,22 @@ class Blockchain {
     }
 
     //Fork 处理
-    replaceChain(newBlockchain) {
-        // 如果新链比当前链短，直接拒绝
-        if (newBlockchain.length <= this.blocks.length) {
-            console.error('Received chain is not longer than current chain');
-            throw new BlockchainAssertionError('Received chain is not longer than current chain');
-        }
+    replaceChain(newChain) {
+        // 验证新链
+        this.checkChain(newChain);
+        
+        console.info('Chain replacement:');
+        console.info(`- Current chain length: ${this.blocks.length}`);
+        console.info(`- New chain length: ${newChain.length}`);
 
-        // 验证新链的正确性
-        this.checkChain(newBlockchain);
-
-        // 计算两条链的总难度
-        const currentDifficulty = this.calculateChainDifficulty(this.blocks);
-        const newDifficulty = this.calculateChainDifficulty(newBlockchain);
-
-        // 只有新链更长且难度更大时才替换
-        if (newBlockchain.length > this.blocks.length && newDifficulty > currentDifficulty) {
-            console.info('Received blockchain is valid. Replacing current blockchain with received blockchain');
+        // 只替换更长的链
+        if (newChain.length > this.blocks.length) {
+            console.info('Replacing blockchain with received blockchain');
             
-            // 获取分叉后的新区块
-            let newBlocks = R.takeLast(newBlockchain.length - this.blocks.length, newBlockchain);
-
-            // 回滚交易池中的交易
+            // 获取新增的区块
+            let newBlocks = R.takeLast(newChain.length - this.blocks.length, newChain);
+            
+            // 将新区块的交易添加回交易池
             R.forEach((block) => {
                 R.forEach((tx) => {
                     this.transactions.push(tx);
@@ -104,17 +98,17 @@ class Blockchain {
             }, newBlocks);
 
             // 更新区块链
-            this.blocks = newBlockchain;
+            this.blocks = newChain;
             this.blocksDb.write(this.blocks);
 
-            // 清理交易池中已经包含在新链中的交易
+            // 从交易池中移除已经包含在新区块中的交易
             R.forEach((block) => {
                 this.removeBlockTransactionsFromTransactions(block);
             }, newBlocks);
 
             this.emitter.emit('blockchainReplaced', newBlocks);
         } else {
-            console.error('Received blockchain is invalid');
+            console.info('Received blockchain is invalid');
             throw new BlockchainAssertionError('Received blockchain is invalid');
         }
     }

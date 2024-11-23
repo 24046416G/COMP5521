@@ -185,30 +185,119 @@ class Node {
     }
 
     checkReceivedBlocks(blocks) {
+        // 按区块索引排序接收到的区块
         const receivedBlocks = blocks.sort((b1, b2) => (b1.index - b2.index));
         const latestBlockReceived = receivedBlocks[receivedBlocks.length - 1];
         const latestBlockHeld = this.blockchain.getLastBlock();
 
-        // If the received blockchain is not longer than blockchain. Do nothing.
+        // 打印日志以便调试
+        console.info('Fork resolution:');
+        console.info(`- Current chain height: ${latestBlockHeld.index}`);
+        console.info(`- Received chain height: ${latestBlockReceived.index}`);
+
+        // 如果接收到的链不比当前的长，不做任何处理
         if (latestBlockReceived.index <= latestBlockHeld.index) {
-            console.info('Received blockchain is not longer than blockchain. Do nothing');
+            console.info('Received chain is not longer than current chain. No action needed.');
             return false;
         }
 
-        console.info(`Blockchain possibly behind. We got: ${latestBlockHeld.index}, Peer got: ${latestBlockReceived.index}`);
-        if (latestBlockHeld.hash === latestBlockReceived.previousHash) { // We can append the received block to our chain
-            console.info('Appending received block to our chain');
-            this.blockchain.addBlock(latestBlockReceived);
-            return true;
-        } else if (receivedBlocks.length === 1) { // We have to query the chain from our peer
-            console.info('Querying chain from our peers');
+        console.info(`Blockchain possibly behind. Current height: ${latestBlockHeld.index}, Received height: ${latestBlockReceived.index}`);
+
+        // 检查是否可以直接添加新区块
+        if (latestBlockHeld.hash === latestBlockReceived.previousHash) {
+            console.info('Received block is direct successor. Appending to chain.');
+            try {
+                this.blockchain.addBlock(latestBlockReceived);
+                return true;
+            } catch (err) {
+                console.error('Error adding block:', err);
+                return false;
+            }
+        } 
+        // 如果只收到一个区块，需要请求完整的区块链
+        else if (receivedBlocks.length === 1) {
+            console.info('Received single block. Requesting full chain.');
             this.broadcast(this.getBlocks);
             return null;
-        } else { // Received blockchain is longer than current blockchain
-            console.info('Received blockchain is longer than current blockchain');
-            this.blockchain.replaceChain(receivedBlocks);
-            return true;
+        } 
+        // 处理分叉情况 - 简单地选择最长的链
+        else {
+            console.info('Fork detected. Comparing chain lengths...');
+            
+            try {
+                // 验证接收到的链的基本有效性（不包括难度验证）
+                this.validateChainBasics(receivedBlocks);
+                
+                // 比较链长度
+                if (receivedBlocks.length > this.blockchain.getAllBlocks().length) {
+                    console.info('Received chain is longer. Replacing current chain.');
+                    // 直接替换链，不进行难度验证
+                    this.replaceChain(receivedBlocks);
+                    return true;
+                } else {
+                    console.info('Keeping current chain as it is equal or longer.');
+                    return false;
+                }
+            } catch (err) {
+                console.error('Error during fork resolution:', err);
+                return false;
+            }
         }
+    }
+
+    // 添加基本的链验证方法（不包括难度验证）
+    validateChainBasics(blocks) {
+        // 验证创世区块
+        if (JSON.stringify(blocks[0]) !== JSON.stringify(Block.genesis)) {
+            throw new Error('Invalid genesis block');
+        }
+
+        // 验证区块连接性
+        for (let i = 1; i < blocks.length; i++) {
+            const currentBlock = blocks[i];
+            const previousBlock = blocks[i - 1];
+
+            // 验证区块索引
+            if (previousBlock.index + 1 !== currentBlock.index) {
+                throw new Error(`Invalid block index at ${i}`);
+            }
+
+            // 验证前一个区块的哈希
+            if (previousBlock.hash !== currentBlock.previousHash) {
+                throw new Error(`Invalid previous hash at block ${i}`);
+            }
+
+            // 验证区块哈希
+            if (currentBlock.hash !== currentBlock.toHash()) {
+                throw new Error(`Invalid hash at block ${i}`);
+            }
+        }
+    }
+
+    // 添加替换链的方法
+    replaceChain(newChain) {
+        console.info('Replacing blockchain with received chain');
+        
+        // 获取新增的区块
+        let newBlocks = R.takeLast(newChain.length - this.blockchain.blocks.length, newChain);
+        
+        // 将新区块的交易添加回交易池
+        R.forEach((block) => {
+            R.forEach((tx) => {
+                this.blockchain.transactions.push(tx);
+            }, block.transactions);
+        }, newBlocks);
+
+        // 更新区块链
+        this.blockchain.blocks = newChain;
+        this.blockchain.blocksDb.write(newChain);
+
+        // 从交易池中移除已经包含在新区块中的交易
+        R.forEach((block) => {
+            this.blockchain.removeBlockTransactionsFromTransactions(block);
+        }, newBlocks);
+
+        this.blockchain.emitter.emit('blockchainReplaced', newBlocks);
     }
 }
 
