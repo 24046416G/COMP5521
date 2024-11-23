@@ -243,7 +243,7 @@ class Operator {
             return wallet.balance;
         }
         
-        // 计算所有地址的UTXO总额
+        // 计算所���地址的UTXO总额
         const totalBalance = R.sum(
             R.map(
                 address => this.getBalanceForAddress(address),
@@ -280,18 +280,19 @@ class Operator {
             throw new Error('No key pair found for wallet');
         }
 
-        // 获取学生的未花费交易
-        const unspentTxs = this.blockchain.getUnspentTransactionsForAddress(studentPublicKey);
-        if (unspentTxs.length === 0) {
-            throw new Error('No unspent transactions found for student');
+        // 获取当前实际余额（包括挖矿奖励）
+        const currentBalance = this.getWalletBalance(walletId);
+        
+        // 检查余额是否足够
+        if (currentBalance < Config.ATTENDANCE_CONFIG.ATTENDANCE_AMOUNT) {
+            throw new Error(`Insufficient balance: required ${Config.ATTENDANCE_CONFIG.ATTENDANCE_AMOUNT}, but got ${currentBalance}`);
         }
 
-        // 选择一个未花费的交易作为输入
-        const unspentTx = unspentTxs[0];
-        const inputAmount = unspentTx.amount;
-
-        // 计算找零金额
-        const changeAmount = inputAmount - Config.ATTENDANCE_CONFIG.ATTENDANCE_AMOUNT;
+        // 获取未花费的交易输出
+        const unspentTx = this.blockchain.getUnspentTransactionsForAddress(studentPublicKey)[0];
+        if (!unspentTx) {
+            throw new Error('No unspent transaction found');
+        }
 
         // 创建交易对象
         let transactionData = {
@@ -303,13 +304,12 @@ class Operator {
                     {
                         transaction: unspentTx.transaction,
                         index: unspentTx.index,
-                        amount: inputAmount,
+                        amount: unspentTx.amount,
                         address: studentPublicKey
                     }
                 ],
                 outputs: [
                     {
-                        // 给老师的考勤费
                         amount: Config.ATTENDANCE_CONFIG.ATTENDANCE_AMOUNT,
                         address: Config.ATTENDANCE_CONFIG.DEFAULT_TEACHER_ADDRESS,
                         metadata: {
@@ -322,8 +322,8 @@ class Operator {
                         }
                     },
                     {
-                        // 找零返回给学生
-                        amount: changeAmount,
+                        // 找零金额应该是inputs中的amount减去考勤费用
+                        amount: unspentTx.amount - Config.ATTENDANCE_CONFIG.ATTENDANCE_AMOUNT,
                         address: studentPublicKey
                     }
                 ]
@@ -351,8 +351,8 @@ class Operator {
         // 计算最终的交易哈希
         transactionData.hash = CryptoUtil.hash(transactionData.id + JSON.stringify(transactionData.data));
 
-        // 更新学生钱包余额
-        wallet.updateBalance(changeAmount);
+        // 更新学生钱包余额（使用当前实际余额减去考勤费用）
+        wallet.updateBalance(currentBalance - Config.ATTENDANCE_CONFIG.ATTENDANCE_AMOUNT);
         this.db.write(this.wallets);
 
         // 更新教师余额

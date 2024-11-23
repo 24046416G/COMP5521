@@ -135,8 +135,38 @@ class HttpServer {
             }
         });
 
+        //http://localhost:3001/blockchain/transactions/unspent?address=your_address
         this.app.get('/blockchain/transactions/unspent', (req, res) => {
-            res.status(200).send(blockchain.getUnspentTransactionsForAddress(req.query.address));
+            try {
+                const address = req.query.address;
+                if (!address) {
+                    res.status(400).send('Address parameter is required');
+                    return;
+                }
+
+                const unspentTxs = blockchain.getUnspentTransactionsForAddress(address);
+                
+                // 格式化返回结果，添加更多有用的信息
+                const formattedUnspentTxs = unspentTxs.map(utxo => ({
+                    transaction: utxo.transaction,  // 交易ID
+                    index: utxo.index,             // 输出索引
+                    amount: utxo.amount,           // 金额
+                    address: utxo.address,         // 地址
+                    blockIndex: utxo.blockIndex,   // 所在区块索引
+                    timestamp: utxo.timestamp,     // 交易时间戳
+                    type: utxo.type,              // 交易类型
+                    metadata: utxo.metadata        // 交易元数据（如果有）
+                }));
+
+                res.status(200).send({
+                    address: address,
+                    unspentTransactions: formattedUnspentTxs,
+                    totalAmount: formattedUnspentTxs.reduce((sum, tx) => sum + tx.amount, 0)
+                });
+            } catch (err) {
+                console.error('Error getting unspent transactions:', err);
+                res.status(500).send(err.message);
+            }
         });
 
         this.app.get('/operator/wallets', (req, res) => {
@@ -173,7 +203,7 @@ class HttpServer {
                 const wallet = wallets.find(w => w.id === req.params.walletId);
                 if (!wallet) throw new Error(`Wallet not found with id '${req.params.walletId}'`);
                 
-                // 返回钱包信息
+                // 返回钱信息
                 res.status(200).send({
                     id: wallet.id,
                     addresses: wallet.keyPairs,
@@ -254,17 +284,31 @@ class HttpServer {
         });
 
         this.app.post('/miner/mine', (req, res, next) => {
-            const teacherConfig = require('../../data/teacher.json');
-            miner.mine(req.body.rewardAddress, teacherConfig.address)
+            console.info('Starting mining process...');
+            
+            miner.mine(req.body.rewardAddress, req.body['feeAddress'] || req.body.rewardAddress)
                 .then((newBlock) => {
-                    newBlock = Block.fromJson(newBlock);
-                    blockchain.addBlock(newBlock);
-                    blockchain.updateMiningReward(newBlock);
-                    res.status(201).send(newBlock);
+                    try {
+                        // 确保使用正确的难度值
+                        const expectedDifficulty = blockchain.getDifficulty(newBlock.index);
+                        newBlock = Block.fromJson(newBlock);
+                        newBlock.difficulty = expectedDifficulty;
+                        
+                        console.info(`Block mined successfully. Index: ${newBlock.index}, Difficulty: ${newBlock.difficulty}, Hash: ${newBlock.hash}`);
+                        
+                        blockchain.addBlock(newBlock);
+                        res.status(201).send(newBlock);
+                    } catch (err) {
+                        console.error('Error adding block:', err);
+                        next(err);
+                    }
                 })
                 .catch((ex) => {
-                    if (ex instanceof BlockAssertionError && ex.message.includes('Invalid index')) next(new HTTPError(409, 'A new block were added before we were able to mine one'), null, ex);
-                    else next(ex);
+                    console.error('Mining failed:', ex);
+                    if (ex instanceof BlockAssertionError && ex.message.includes('Invalid index')) 
+                        next(new HTTPError(409, 'A new block were added before we were able to mine one'), null, ex);
+                    else 
+                        next(ex);
                 });
         });
 

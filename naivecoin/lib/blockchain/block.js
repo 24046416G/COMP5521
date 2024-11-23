@@ -26,22 +26,34 @@ const Config = require('../config');
 
 class Block {
     constructor() {
+        this.index = 0;
+        this.previousHash = '0';
+        this.timestamp = 0;
+        this.nonce = 0;
+        this.transactions = [];
         this.difficulty = 0;
+        this.hash = '';
+        this.miningTime = 0;
     }
 
     toHash() {
-        // INFO: There are different implementations of the hash algorithm, for example: https://en.bitcoin.it/wiki/Hashcash
-        return CryptoUtil.hash(this.index + this.previousHash + this.timestamp + JSON.stringify(this.transactions) + this.nonce);
+        // 包含 difficulty 在哈希计算中
+        return CryptoUtil.hash(
+            this.index + 
+            this.previousHash + 
+            this.timestamp + 
+            JSON.stringify(this.transactions) + 
+            this.nonce +
+            this.difficulty
+        );
     }
 
     getDifficulty() {
-        // 简化难度计算
-        const difficulty = parseInt(this.hash.substring(0, 4), 16);
-        return difficulty;
+        // 返回当前区块的难度值
+        return this.difficulty;
     }
 
     static get genesis() {
-        // The genesis block is fixed
         return Block.fromJson(Config.genesisBlock);
     }
 
@@ -58,7 +70,6 @@ class Block {
         block.hash = block.toHash();
         return block;
     }
-
 }
 
 module.exports = Block;
