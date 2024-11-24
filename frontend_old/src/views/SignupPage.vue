@@ -86,62 +86,6 @@
         </div>
       </div>
     </div>
-
-    <!-- Keys Modal -->
-    <div v-if="showModal" class="fixed inset-0 bg-gray-500 bg-opacity-75 flex items-center justify-center">
-      <div class="bg-white p-8 rounded-lg max-w-lg w-full mx-4">
-        <h3 class="text-lg font-medium text-gray-900 mb-4">Your Keys</h3>
-        <div class="space-y-4">
-          <div>
-            <label class="block text-sm font-medium text-gray-700">Public Key</label>
-            <div class="mt-1 relative">
-              <input 
-                type="text" 
-                readonly 
-                :value="keys.publicKey"
-                class="block w-full pr-10 border-gray-300 rounded-md"
-              >
-              <button 
-                @click="copyToClipboard(keys.publicKey, 'public')"
-                type="button"
-                class="absolute inset-y-0 right-0 px-3 flex items-center hover:bg-gray-200 transition duration-200"
-              >
-                <font-awesome-icon icon="copy" />
-              </button>
-            </div>
-            <span v-if="copiedMessagePublicKey" class="text-green-600 text-sm">{{ copiedMessagePublicKey }}</span>
-          </div>
-          <div>
-            <label class="block text-sm font-medium text-gray-700">Private Key</label>
-            <div class="mt-1 relative">
-              <input 
-                type="text" 
-                readonly 
-                :value="keys.privateKey"
-                class="block w-full pr-10 border-gray-300 rounded-md"
-              >
-              <button 
-                @click="copyToClipboard(keys.privateKey, 'private')"
-                type="button"
-                class="absolute inset-y-0 right-0 px-3 flex items-center hover:bg-gray-200 transition duration-200"
-              >
-                <font-awesome-icon icon="copy" />
-              </button>
-            </div>
-            <span v-if="copiedMessagePrivateKey" class="text-green-600 text-sm">{{ copiedMessagePrivateKey }}</span>
-          </div>
-        </div>
-        <div class="mt-6">
-          <button 
-            @click="confirmKeys"
-            type="button"
-            class="w-full inline-flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
-          >
-            I have saved my keys
-          </button>
-        </div>
-      </div>
-    </div>
   </div>
 </template>
 
@@ -161,15 +105,7 @@ const form = reactive({
 })
 
 const errorMessage = ref('')
-const showModal = ref(false)
-const keys = reactive({
-  publicKey: '',
-  privateKey: ''
-})
-
 const showPassword = ref(false)
-const copiedMessagePublicKey = ref('')
-const copiedMessagePrivateKey = ref('')
 
 const handleSignup = async () => {
   try {
@@ -218,10 +154,16 @@ const handleSignup = async () => {
           role: 'student'
         })
         
-        // 显示密钥对模态框
-        keys.publicKey = walletData.publicKey
-        keys.walletId = walletData.walletId
-        showModal.value = true
+        // 直接导航到学生仪表板
+        const studentId = walletData.studentId
+        if (!studentId) {
+          throw new Error('Student ID not found')
+        }
+        
+        await router.push({
+          name: 'studentCheckIn',
+          params: { studentId }
+        })
       }
     } else {
       throw new Error(walletResponse.data.message || 'Failed to create wallet')
@@ -229,46 +171,6 @@ const handleSignup = async () => {
   } catch (error) {
     console.error('Registration error:', error)
     errorMessage.value = error.response?.data?.message || error.message || 'Registration failed'
-  }
-}
-
-const copyToClipboard = async (text, type) => {
-  try {
-    await navigator.clipboard.writeText(text)
-    if (type === 'public') {
-      copiedMessagePublicKey.value = 'Copied!'
-      setTimeout(() => {
-        copiedMessagePublicKey.value = ''
-      }, 2000)
-    } else {
-      copiedMessagePrivateKey.value = 'Copied!'
-      setTimeout(() => {
-        copiedMessagePrivateKey.value = ''
-      }, 2000)
-    }
-  } catch (err) {
-    console.error('Failed to copy text: ', err)
-  }
-}
-
-const confirmKeys = async () => {
-  try {
-    showModal.value = false
-    console.log('Navigating to dashboard...')  // 添加日志
-    
-    const studentId = localStorage.getItem('studentId')
-    if (!studentId) {
-      throw new Error('Student ID not found')
-    }
-    
-    // 使用 name 进行导航
-    await router.push({
-      name: 'studentCheckIn',
-      params: { studentId }
-    })
-  } catch (error) {
-    console.error('Navigation error:', error)
-    errorMessage.value = 'Failed to navigate to dashboard'
   }
 }
 </script>

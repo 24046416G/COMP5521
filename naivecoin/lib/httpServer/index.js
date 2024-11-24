@@ -326,7 +326,7 @@ class HttpServer {
                 if (!password || !studentId) {
                     return res.status(400).send({
                         success: false,
-                        message: 'Password and studentId are required'
+                        message: 'Password and Student ID Are Required'
                     });
                 }
 
@@ -367,7 +367,7 @@ class HttpServer {
                     // 登录失败
                     res.status(401).send({
                         success: false,
-                        message: 'Invalid studentId or password'
+                        message: 'Invalid Student ID or Password'
                     });
                 }
             } catch (err) {

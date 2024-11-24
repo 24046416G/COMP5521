@@ -90,8 +90,8 @@
                   </div>
                   <div class="info-content">
                     <label>Address</label>
-                    <p class="text-sm font-mono truncate" :title="walletInfo.addresses[0]">
-                      {{ formatAddress(walletInfo.addresses[0]) }}
+                    <p class="text-sm font-mono truncate" :title="walletInfo.addresses[0]?.publicKey || 'N/A'">
+                      {{ formatAddress(walletInfo.addresses[0]?.publicKey) }}
                     </p>
                   </div>
                 </div>
@@ -118,7 +118,7 @@ const walletInfo = ref({
 })
 
 const formatAddress = (address) => {
-  if (!address) return 'N/A'
+  if (!address || typeof address !== 'string') return 'N/A'
   return `${address.substring(0, 6)}...${address.substring(address.length - 4)}`
 }
 
@@ -149,7 +149,7 @@ const fetchWalletInfo = async () => {
         studentId: response.data.studentId || 'N/A',
         classId: response.data.classId || 'N/A',
         balance: response.data.balance || 0,
-        addresses: Array.isArray(response.data.addresses) ? response.data.addresses : [response.data.addresses],
+        addresses: response.data.addresses || [],
         id: response.data.id || 'N/A'
       }
     }
@@ -282,22 +282,35 @@ onMounted(() => {
   animation: none;
 }
 
+/* 修改卡片样式 */
 .info-card {
-  @apply bg-white rounded-xl p-4 flex items-center space-x-4 shadow-sm 
-         hover:shadow-md transition-all duration-300 border border-gray-100;
+  background-color: white;
+  border-radius: 0.75rem;
+  padding: 1rem;
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+  border: 1px solid rgb(243, 244, 246);
+  transition: all 0.3s ease;
 }
 
 .info-icon {
-  @apply p-3 rounded-full flex-shrink-0;
+  padding: 0.75rem;
+  border-radius: 9999px;
+  flex-shrink: 0;
 }
 
 .info-content {
-  @apply flex-1 min-w-0;
+  flex: 1;
+  min-width: 0;
 }
 
 /* 添加卡片悬停效果 */
 .info-card:hover {
-  @apply transform scale-105 border-indigo-200;
+  transform: scale(1.05);
+  border-color: rgb(199, 210, 254);
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
 }
 
 /* 其他动画样式保持不变 */

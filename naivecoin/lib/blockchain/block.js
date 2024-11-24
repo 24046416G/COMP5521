@@ -31,7 +31,7 @@ class Block {
         this.timestamp = 0;
         this.nonce = 0;
         this.transactions = [];
-        this.difficulty = 0;
+        this.difficulty = 1;
         this.hash = '';
         this.miningTime = 0;
     }

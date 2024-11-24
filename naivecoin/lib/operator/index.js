@@ -267,10 +267,10 @@ class Operator {
         if (wallet == null) throw new Error(`Wallet not found with id '${walletId}'`);
 
         // 验证密码
-        let passwordHash = CryptoUtil.hash(studentId);
-        if (!this.checkWalletPassword(walletId, passwordHash)) {
-            throw new Error('Invalid password');
-        }
+        // let passwordHash = CryptoUtil.hash(studentId);
+        // if (!this.checkWalletPassword(walletId, passwordHash)) {
+        //     throw new Error('Invalid password');
+        // }
 
         // 获取学生的公钥和私钥
         let studentPublicKey = wallet.getPublicKey();

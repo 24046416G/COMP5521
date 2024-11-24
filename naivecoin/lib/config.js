@@ -3,7 +3,7 @@ const teacherConfig = require('../data/teacher.json');
 
 module.exports = {
     // INFO: The mining reward could decreases over time like bitcoin. See https://en.bitcoin.it/wiki/Mining#Reward.
-    MINING_REWARD: 5000000000,
+    MINING_REWARD: 50,
     // INFO: Usually it's a fee over transaction size (not quantity)
     FEE_PER_TRANSACTION: 1,
     // INFO: Usually the limit is determined by block size (not quantity)
@@ -28,7 +28,7 @@ module.exports = {
     pow: {
         getDifficulty: (blocks, index) => {
             // 基础难度值
-            const INITIAL_DIFFICULTY = 2;
+            const INITIAL_DIFFICULTY = 1;
             const ADJUSTMENT_INTERVAL = 5;  // 每5个区块调整一次难度
             
             // 如果是创世区块或第一个区块

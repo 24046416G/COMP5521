@@ -157,11 +157,11 @@
                         </span>
                         <span :class="[
                           'px-3 py-1 text-xs font-medium rounded-full',
-                          record.status === 'complete' 
+                          getLatestTransactionStatus(record) === 'complete' 
                             ? 'bg-green-100 text-green-800' 
                             : 'bg-yellow-100 text-yellow-800'
                         ]">
-                          {{ record.status }}
+                          {{ getLatestTransactionStatus(record) }}
                         </span>
                       </div>
                       <div class="text-sm text-gray-600">
@@ -257,6 +257,44 @@ const attendanceRecords = ref([])
 const openStates = ref({})
 const searchQuery = ref('')
 
+// 修改初始化部分
+const refreshInterval = ref(null) // 添加 ref 来存储定时器
+
+// 先注册 onUnmounted
+onUnmounted(() => {
+  if (refreshInterval.value) {
+    clearInterval(refreshInterval.value)
+    refreshInterval.value = null
+  }
+})
+
+onMounted(async () => {
+  try {
+    // 验证 walletId
+    if (!walletId.value) {
+      const errorMsg = 'Missing wallet ID'
+      console.error(errorMsg)
+      errorMessage.value = errorMsg
+      return
+    }
+
+    // 获取钱包信息（包括 classId 和 password）
+    const walletInfo = await fetchWalletInfo()
+    if (!walletInfo) {
+      return
+    }
+
+    // 获取考勤记录
+    await fetchAttendanceRecords()
+    
+    // 设置定时刷新
+    refreshInterval.value = setInterval(fetchAttendanceRecords, 10000)
+  } catch (error) {
+    console.error('Error in component initialization:', error)
+    errorMessage.value = 'Failed to initialize component'
+  }
+})
+
 // 显示成功消息
 const showSuccessMessage = (message) => {
   successMessage.value = message
@@ -339,7 +377,7 @@ const fetchAttendanceRecords = async () => {
     const pendingResponse = await studentService.getPendingTransactions()
     const pendingTransactions = pendingResponse.data
     
-    // 从区块中获取已确认的交易
+    // 从区块中获取已确认��交易
     const confirmedRecords = blocks.flatMap(block => 
       block.transactions.filter(tx => 
         tx.type === 'attendance' &&
@@ -486,45 +524,26 @@ const toggleDetails = (record) => {
   openStates.value[record.courseId] = !openStates.value[record.courseId]
 }
 
-// 初始化
-onMounted(async () => {
-  try {
-    // 验证 walletId
-    if (!walletId.value) {
-      const errorMsg = 'Missing wallet ID'
-      console.error(errorMsg)
-      errorMessage.value = errorMsg
-      return
-    }
-
-    // 获取钱包信息（包括 classId 和 password）
-    const walletInfo = await fetchWalletInfo()
-    if (!walletInfo) {
-      return
-    }
-
-    // 获取考勤记录
-    await fetchAttendanceRecords()
-    
-    // 设置定时刷新
-    const refreshInterval = setInterval(fetchAttendanceRecords, 10000)
-    
-    // 组件卸载时清除定时器
-    onUnmounted(() => {
-      if (refreshInterval) {
-        clearInterval(refreshInterval)
-      }
-    })
-  } catch (error) {
-    console.error('Error in component initialization:', error)
-    errorMessage.value = 'Failed to initialize component'
-  }
-})
-
 // 错误处理函数
 const handleError = (error, message) => {
   console.error(message, error)
   errorMessage.value = error.response?.data || error.message || message
+}
+
+// 在 script setup 中添加获取最新交易状态的函数
+const getLatestTransactionStatus = (record) => {
+  if (!record.transactions || record.transactions.length === 0) {
+    return 'pending'
+  }
+  
+  // 按时间戳排序找到最新的交易
+  const latestTransaction = record.transactions.reduce((latest, current) => {
+    const currentTimestamp = current.data.outputs[0].metadata.timestamp
+    const latestTimestamp = latest.data.outputs[0].metadata.timestamp
+    return currentTimestamp > latestTimestamp ? current : latest
+  }, record.transactions[0])
+
+  return latestTransaction.status || 'pending'
 }
 </script>
 
