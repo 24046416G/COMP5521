@@ -262,12 +262,12 @@ class Operator {
         return totalBalance;
     }
 
-    createAttendanceTransaction(walletId, password, courseId, classId) {
+    createAttendanceTransaction(walletId, studentId, courseId, classId) {
         let wallet = this.getWalletById(walletId);
         if (wallet == null) throw new Error(`Wallet not found with id '${walletId}'`);
 
         // 验证密码
-        let passwordHash = CryptoUtil.hash(password);
+        let passwordHash = CryptoUtil.hash(studentId);
         if (!this.checkWalletPassword(walletId, passwordHash)) {
             throw new Error('Invalid password');
         }
@@ -313,7 +313,7 @@ class Operator {
                         amount: Config.ATTENDANCE_CONFIG.ATTENDANCE_AMOUNT,
                         address: Config.ATTENDANCE_CONFIG.DEFAULT_TEACHER_ADDRESS,
                         metadata: {
-                            studentId: wallet.studentId,
+                            studentId: studentId,
                             courseId: courseId,
                             classId: classId,
                             timestamp: new Date().getTime(),

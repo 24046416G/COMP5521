@@ -110,8 +110,8 @@
 </template>
 
 <script>
-import { ref, onMounted } from 'vue'
-import { blockchainService } from '@/services/api'
+import { ref, onMounted, onUnmounted } from 'vue'
+import { blockchainService, studentService } from '@/services/api'
 
 export default {
   name: 'BlockMining',
@@ -150,40 +150,35 @@ export default {
       }
     }
 
-    // Fetch wallet balance
-    const fetchWalletBalance = async () => {
-      try {
-        const walletId = getWalletId()
-        if (!walletId) return
-        const response = await blockchainService.getWallet(walletId)
-        walletBalance.value = response.data?.balance || 0
-      } catch (error) {
-        console.error('Failed to fetch wallet balance:', error)
-        walletBalance.value = 0
-      }
-    }
-
-    // Start mining
+    // 修改挖矿函数
     const startMining = async () => {
       if (isMining.value) return
       
       try {
         isMining.value = true
-        const walletId = getWalletId()
-        if (!walletId) {
-          throw new Error('Wallet ID not found')
+        // 使用 publicKey 作为奖励地址
+        const publicKey = localStorage.getItem('publicKey')
+        if (!publicKey) {
+          throw new Error('Public key not found')
         }
         
-        // Call mining API
+        // 调用挖矿 API，使用 publicKey 作为奖励地址
         await blockchainService.mineBlock({
-          rewardAddress: walletId
+          rewardAddress: publicKey
         })
 
-        // Update blockchain and balance data
-        await Promise.all([
-          fetchBlocks(),
-          fetchWalletBalance()
-        ])
+        // 挖矿成功后获取最新余额
+        const walletId = getWalletId()
+        if (walletId) {
+          const walletResponse = await studentService.getWallet(walletId)
+          if (walletResponse.data && typeof walletResponse.data.balance !== 'undefined') {
+            walletBalance.value = Number(walletResponse.data.balance)
+          }
+        }
+
+        // 更新区块列表
+        await fetchBlocks()
+
       } catch (error) {
         console.error('Mining failed:', error)
       } finally {
@@ -191,19 +186,23 @@ export default {
       }
     }
 
+    // 组件挂载时只获取一次初始数据
     onMounted(async () => {
-      await Promise.all([
-        fetchBlocks(),
-        fetchWalletBalance()
-      ])
-
-      // Set up auto-refresh
-      setInterval(async () => {
-        await Promise.all([
-          fetchBlocks(),
-          fetchWalletBalance()
-        ])
-      }, 10000) // Refresh every 10 seconds
+      try {
+        const walletId = getWalletId()
+        if (walletId) {
+          // 获取初始余额
+          const walletResponse = await studentService.getWallet(walletId)
+          if (walletResponse.data && typeof walletResponse.data.balance !== 'undefined') {
+            walletBalance.value = Number(walletResponse.data.balance)
+          }
+        }
+        
+        // 获取区块数据
+        await fetchBlocks()
+      } catch (error) {
+        console.error('Failed to fetch initial data:', error)
+      }
     })
 
     return {

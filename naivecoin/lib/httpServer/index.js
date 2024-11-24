@@ -203,13 +203,14 @@ class HttpServer {
                 const wallet = wallets.find(w => w.id === req.params.walletId);
                 if (!wallet) throw new Error(`Wallet not found with id '${req.params.walletId}'`);
                 
-                // 返回钱信息
+                // 返回钱包信息，包括密码
                 res.status(200).send({
                     id: wallet.id,
                     addresses: wallet.keyPairs,
                     balance: wallet.balance,
                     studentId: wallet.studentId,
-                    classId: wallet.classId
+                    classId: wallet.classId,
+                    password: wallet.password  // 添加密码字段
                 });
             } catch (err) {
                 res.status(404).send(err.message);
@@ -474,14 +475,14 @@ class HttpServer {
         });
 
         this.app.post('/student/attendance/:walletId', (req, res) => {
-            let { password, courseId, classId } = req.body;
+            let { studentId, courseId, classId } = req.body;
             let walletId = req.params.walletId;
             
             try {
                 // 创建考勤交易
                 let transaction = this.operator.createAttendanceTransaction(
                     walletId, 
-                    password, 
+                    studentId, 
                     courseId,
                     classId
                 );

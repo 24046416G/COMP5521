@@ -83,10 +83,11 @@ export const blockchainService = {
 
 // 学生服务
 export const studentService = {
-  // 签到
+  // 更新签到方法，只传递必要参数
   checkIn(walletId, data) {
+    console.log('Sending check-in request:', { walletId, data })
     return api.post(`/student/attendance/${walletId}`, {
-      password: data.password,
+      studentId: data.studentId,  // 修改为只发送 studentId
       courseId: data.courseId,
       classId: data.classId
     });

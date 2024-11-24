@@ -221,7 +221,7 @@
                             </svg>
                             Check-in #{{ index + 1 }}
                           </span>
-                          <span class="text-gray-500">{{ formatDateTime(tx.data.outputs[0].metadata.registrationTime) }}</span>
+                          <span class="text-gray-500">{{ formatDateTime(tx.data.outputs[0].metadata.timestamp) }}</span>
                         </div>
                       </div>
                     </div>
@@ -240,10 +240,10 @@
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { studentService } from '../../../services/api'
 
-// 从 localStorage 获取必要信息
-const studentId = localStorage.getItem('studentId')
-const walletId = localStorage.getItem('walletId')
-const password = localStorage.getItem('password')
+// 修改为响应式引用
+const studentId = ref(localStorage.getItem('studentId'))
+const walletId = ref(localStorage.getItem('walletId'))
+const password = ref(localStorage.getItem('password'))
 
 // 状态变量
 const classId = ref('')
@@ -268,19 +268,47 @@ const showSuccessMessage = (message) => {
 // 格式化时间
 const formatDateTime = (timestamp) => {
   if (!timestamp) return 'N/A'
-  return new Date(Number(timestamp)).toLocaleString()
+  // 确保 timestamp 是数字
+  const date = new Date(typeof timestamp === 'string' ? parseInt(timestamp) : timestamp)
+  return date.toLocaleString('zh-CN', {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false
+  })
 }
 
-// 获取 classId
-const fetchClassId = async () => {
+// 获取钱包信息
+const fetchWalletInfo = async () => {
   try {
-    if (!walletId) {
+    if (!walletId.value) {
+      console.error('Wallet ID is missing')
       throw new Error('Wallet ID not found')
     }
-    const response = await studentService.getWallet(walletId)
-    return response.data.classId
+
+    console.log('Fetching wallet info for:', walletId.value)
+    const response = await studentService.getWallet(walletId.value)
+    
+    if (!response.data) {
+      throw new Error('Invalid wallet data received')
+    }
+
+    // 设置 classId 和从后端获取的 password
+    classId.value = response.data.classId
+    password.value = response.data.password // 直接使用后端返回的密码
+
+    console.log('Wallet info received:', {
+      classId: classId.value,
+      hasPassword: !!password.value
+    })
+
+    return response.data
   } catch (error) {
-    handleError(error, 'Error fetching class ID')
+    console.error('Error fetching wallet info:', error)
+    errorMessage.value = `Error fetching wallet info: ${error.message}`
     return null
   }
 }
@@ -315,7 +343,7 @@ const fetchAttendanceRecords = async () => {
     const confirmedRecords = blocks.flatMap(block => 
       block.transactions.filter(tx => 
         tx.type === 'attendance' &&
-        tx.data?.outputs?.[0]?.metadata?.studentId === studentId
+        tx.data?.outputs?.[0]?.metadata?.studentId === studentId.value
       ).map(tx => ({
         ...tx,
         status: 'complete',
@@ -328,7 +356,7 @@ const fetchAttendanceRecords = async () => {
     const pendingRecords = pendingTransactions
       .filter(tx => 
         tx.type === 'attendance' &&
-        tx.data?.outputs?.[0]?.metadata?.studentId === studentId
+        tx.data?.outputs?.[0]?.metadata?.studentId === studentId.value
       )
       .map(tx => ({
         ...tx,
@@ -347,10 +375,16 @@ const fetchAttendanceRecords = async () => {
         acc[courseId] = {
           courseId,
           transactions: [],
-          status: record.status
+          status: record.status,
+          latestTimestamp: record.data.outputs[0].metadata.timestamp
         }
       }
       acc[courseId].transactions.push(record)
+      // 更新最新时间戳
+      const currentTimestamp = record.data.outputs[0].metadata.timestamp
+      if (!acc[courseId].latestTimestamp || currentTimestamp > acc[courseId].latestTimestamp) {
+        acc[courseId].latestTimestamp = currentTimestamp
+      }
       if (record.status === 'complete') {
         acc[courseId].status = 'complete'
       }
@@ -366,7 +400,7 @@ const fetchAttendanceRecords = async () => {
   }
 }
 
-// 处理手动签到
+// 修改手动签到函数
 const handleManualCheckIn = async () => {
   try {
     if (!manualCheckIn.value.courseId.trim()) {
@@ -374,15 +408,22 @@ const handleManualCheckIn = async () => {
       return
     }
 
-    if (!walletId || !password) {
-      throw new Error('Wallet ID or password not found')
+    // 确保有 walletId 和 studentId
+    if (!walletId.value) {
+      errorMessage.value = 'Wallet ID not found. Please login again.'
+      return
+    }
+
+    if (!studentId.value) {
+      errorMessage.value = 'Student ID not found. Please login again.'
+      return
     }
 
     loading.value = true
     errorMessage.value = ''
 
-    const response = await studentService.checkIn(walletId, {
-      password,
+    const response = await studentService.checkIn(walletId.value, {
+      studentId: studentId.value,
       courseId: manualCheckIn.value.courseId.trim(),
       classId: classId.value
     })
@@ -390,7 +431,7 @@ const handleManualCheckIn = async () => {
     if (response.status === 201) {
       showSuccessMessage('Check-in successful!')
       manualCheckIn.value.courseId = ''
-      await fetchAttendanceRecords() // 直接等待刷新完成
+      await fetchAttendanceRecords()
     }
   } catch (error) {
     if (error.response?.data?.includes('Insufficient balance')) {
@@ -403,25 +444,31 @@ const handleManualCheckIn = async () => {
   }
 }
 
-// 处理快速签到
+// 修改快速签到函数
 const handleQuickCheckIn = async (courseId) => {
   try {
-    if (!walletId || !password) {
-      throw new Error('Wallet ID or password not found')
+    if (!walletId.value) {
+      errorMessage.value = 'Wallet ID not found. Please login again.'
+      return
+    }
+
+    if (!studentId.value) {
+      errorMessage.value = 'Student ID not found. Please login again.'
+      return
     }
 
     loading.value = true
     errorMessage.value = ''
 
-    const response = await studentService.checkIn(walletId, {
-      password,
+    const response = await studentService.checkIn(walletId.value, {
+      studentId: studentId.value,
       courseId,
       classId: classId.value
     })
 
     if (response.status === 201) {
       showSuccessMessage('Quick check-in successful!')
-      await fetchAttendanceRecords() // 直接等待刷新完成
+      await fetchAttendanceRecords()
     }
   } catch (error) {
     if (error.response?.data?.includes('Insufficient balance')) {
@@ -442,10 +489,23 @@ const toggleDetails = (record) => {
 // 初始化
 onMounted(async () => {
   try {
-    // 获取 classId
-    classId.value = await fetchClassId()
+    // 验证 walletId
+    if (!walletId.value) {
+      const errorMsg = 'Missing wallet ID'
+      console.error(errorMsg)
+      errorMessage.value = errorMsg
+      return
+    }
+
+    // 获取钱包信息（包括 classId 和 password）
+    const walletInfo = await fetchWalletInfo()
+    if (!walletInfo) {
+      return
+    }
+
     // 获取考勤记录
     await fetchAttendanceRecords()
+    
     // 设置定时刷新
     const refreshInterval = setInterval(fetchAttendanceRecords, 10000)
     
