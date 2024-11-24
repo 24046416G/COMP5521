@@ -23,7 +23,7 @@ class HttpServer {
         this.miner = miner;
 
         this.app.use(cors({
-            origin: 'http://127.0.0.1:5173',
+            // origin: 'http://127.0.0.1:5173',
             credentials: false,
             methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
             allowedHeaders: ['Content-Type', 'Authorization', 'password']
@@ -502,7 +502,7 @@ class HttpServer {
                 ? new Date(startDate).setHours(0, 0, 0, 0) 
                 : new Date(0);
 
-            // 结束日期：如果提供了日期，使用当天结束时间；��则使用当前时间
+            // 结束日期：如果提供了日期，使用当天结束时间；则使用当前时间
             const end = endDate 
                 ? new Date(endDate).setHours(23, 59, 59, 999)
                 : new Date().getTime();
@@ -627,6 +627,64 @@ class HttpServer {
                 res.status(200).send(attendanceRecords);
             } catch (err) {
                 res.status(500).send(err.message);
+            }
+        });
+
+        // 教师登录
+        this.app.post('/teacher/login', (req, res) => {
+            try {
+                const { password, email } = req.body;
+                
+                if (!password || !email) {
+                    return res.status(400).send({
+                        success: false,
+                        message: 'Password and email are required'
+                    });
+                }
+
+                // 读取教师配置文件
+                const path = require('path');
+                const fs = require('fs');
+                const teacherJsonPath = path.join(__dirname, '../../data/teacher.json');
+                
+                try {
+                    const teacherData = fs.readFileSync(teacherJsonPath, 'utf8');
+                    const teacher = JSON.parse(teacherData);
+
+                    // 验证邮箱和密码
+                    if (teacher.teacherEmail === email && teacher.password === password) {
+                        // 登录成功，返回教师信息（排除敏感信息）
+                        const safeTeacherInfo = {
+                            email: teacher.teacherEmail,
+                            address: teacher.address,
+                            balance: teacher.balance
+                        };
+                        
+                        res.status(200).send({
+                            success: true,
+                            message: 'Login successful',
+                            teacher: safeTeacherInfo
+                        });
+                    } else {
+                        // 登录失败
+                        res.status(401).send({
+                            success: false,
+                            message: 'Invalid email or password'
+                        });
+                    }
+                } catch (err) {
+                    console.error('Error reading teacher data:', err);
+                    res.status(500).send({
+                        success: false,
+                        message: 'Error reading teacher data'
+                    });
+                }
+            } catch (err) {
+                console.error('Teacher login error:', err);
+                res.status(500).send({
+                    success: false,
+                    message: 'Internal server error during login'
+                });
             }
         });
 
