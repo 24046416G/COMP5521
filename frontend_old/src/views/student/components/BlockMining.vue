@@ -72,10 +72,6 @@
                   <!-- Block Details -->
                   <div class="flex justify-between items-center mt-4">
                     <div>
-                      <p class="text-sm text-gray-500 font-medium">Mining Date</p>
-                      <p class="text-sm font-bold text-gray-800">{{ formatTime(block.timestamp) }}</p>
-                    </div>
-                    <div>
                       <p class="text-sm text-gray-500 font-medium">Difficulty</p>
                       <p class="text-sm font-bold text-gray-800">{{ block.difficulty }}</p>
                     </div>

@@ -243,7 +243,7 @@ class Operator {
             return wallet.balance;
         }
         
-        // 计算所���地址的UTXO总额
+        // 计算所地址的UTXO总额
         const totalBalance = R.sum(
             R.map(
                 address => this.getBalanceForAddress(address),
@@ -265,12 +265,6 @@ class Operator {
     createAttendanceTransaction(walletId, studentId, courseId, classId) {
         let wallet = this.getWalletById(walletId);
         if (wallet == null) throw new Error(`Wallet not found with id '${walletId}'`);
-
-        // 验证密码
-        // let passwordHash = CryptoUtil.hash(studentId);
-        // if (!this.checkWalletPassword(walletId, passwordHash)) {
-        //     throw new Error('Invalid password');
-        // }
 
         // 获取学生的公钥和私钥
         let studentPublicKey = wallet.getPublicKey();
@@ -330,7 +324,26 @@ class Operator {
             }
         };
 
-        // 对输入进行签名
+        // 生成考勤签名数据
+        const attendanceSignData = {
+            studentId: studentId,
+            courseId: courseId,
+            classId: classId,
+            timestamp: new Date().getTime(),
+            walletId: walletId
+        };
+
+        // 生成考勤签名
+        const attendanceKeyPair = CryptoEdDSAUtil.generateKeyPairFromSecret(studentSecretKey);
+        const attendanceSignature = CryptoEdDSAUtil.signHash(
+            attendanceKeyPair,
+            CryptoUtil.hash(JSON.stringify(attendanceSignData))
+        );
+
+        // 添加考勤签名到metadata
+        transactionData.data.outputs[0].metadata.signature = attendanceSignature;
+
+        // 对输入进行签名（交易签名）
         const inputData = {
             transaction: transactionData.data.inputs[0].transaction,
             index: transactionData.data.inputs[0].index,
@@ -338,15 +351,15 @@ class Operator {
             address: transactionData.data.inputs[0].address
         };
 
-        // 生成密钥对并签名
-        const keyPair = CryptoEdDSAUtil.generateKeyPairFromSecret(studentSecretKey);
-        const signature = CryptoEdDSAUtil.signHash(
-            keyPair,
+        // 生成交易签名
+        const transactionKeyPair = CryptoEdDSAUtil.generateKeyPairFromSecret(studentSecretKey);
+        const transactionSignature = CryptoEdDSAUtil.signHash(
+            transactionKeyPair,
             CryptoUtil.hash(JSON.stringify(inputData))
         );
 
-        // 添加签名到输入
-        transactionData.data.inputs[0].signature = signature;
+        // 添加交易签名到输入
+        transactionData.data.inputs[0].signature = transactionSignature;
 
         // 计算最终的交易哈希
         transactionData.hash = CryptoUtil.hash(transactionData.id + JSON.stringify(transactionData.data));
