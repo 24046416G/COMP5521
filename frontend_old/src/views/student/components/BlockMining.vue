@@ -68,16 +68,20 @@
                       Mined
                     </span>
                   </div>
-                  
+
                   <!-- Block Details -->
-                  <div class="grid grid-cols-2 gap-4 mt-4">
+                  <div class="flex justify-between items-center mt-4">
                     <div>
-                      <p class="text-sm text-gray-500 font-medium">Mining Time</p>
+                      <p class="text-sm text-gray-500 font-medium">Mining Date</p>
                       <p class="text-sm font-bold text-gray-800">{{ formatTime(block.timestamp) }}</p>
                     </div>
                     <div>
                       <p class="text-sm text-gray-500 font-medium">Difficulty</p>
                       <p class="text-sm font-bold text-gray-800">{{ block.difficulty }}</p>
+                    </div>
+                    <div>
+                      <p class="text-sm text-gray-500 font-medium">Mining Time</p>
+                      <p class="text-sm font-bold text-gray-800">{{ parseFloat(block.miningTime).toFixed(5) }}s</p>
                     </div>
                   </div>
 
